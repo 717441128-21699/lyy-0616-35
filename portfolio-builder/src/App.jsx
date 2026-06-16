@@ -35,6 +35,7 @@ function App() {
       <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/preview/:username" element={<ProtectedRoute><PortfolioPreview /></ProtectedRoute>} />
       <Route path="/u/:username" element={<PortfolioViewPage />} />
+      <Route path="/p/:username" element={<PortfolioViewPage />} />
     </Routes>
   );
 }

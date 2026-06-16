@@ -4,7 +4,8 @@ import useAuthStore from '../store/useAuthStore'
 import usePortfolioStore from '../store/usePortfolioStore'
 import {
   Globe, Copy, Check, ExternalLink, Unplug, ShieldCheck, XCircle,
-  Eye, AlertTriangle, Calendar, Tag, ChevronRight, Sparkles
+  Eye, AlertTriangle, Calendar, Tag, ChevronRight, Sparkles,
+  History, RotateCcw, ChevronDown, ChevronUp, Clock, FileText
 } from 'lucide-react'
 
 function checkMissingContent(portfolio, modules) {
@@ -71,6 +72,7 @@ export default function PublishPanel() {
   const portfolio = usePortfolioStore((s) => s.portfolio)
   const publish = usePortfolioStore((s) => s.publish)
   const unpublish = usePortfolioStore((s) => s.unpublish)
+  const restoreVersion = usePortfolioStore((s) => s.restoreVersion)
   const updateDomain = usePortfolioStore((s) => s.updateDomain)
 
   const [customDomain, setCustomDomain] = useState(portfolio.domain.customDomain || '')
@@ -81,15 +83,30 @@ export default function PublishPanel() {
   const [showPublishConfirm, setShowPublishConfirm] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [publishSuccess, setPublishSuccess] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [restoreConfirmVersion, setRestoreConfirmVersion] = useState(null)
 
   const username = user?.username || ''
   const subdomain = `${username}.site`
   const publicUrl = `https://${subdomain}`
+  const localPublicUrl = `/p/${username}`
   const previewUrl = `/preview/${username}`
   const isPublished = portfolio.isPublished
   const publishVersion = portfolio.publishVersion || 0
   const lastPublishedAt = portfolio.lastPublishedAt
   const modules = portfolio.modules || {}
+  const publishHistory = portfolio.publishHistory || []
+  const hasDraftChanges = isPublished && portfolio.publishedSnapshot && (
+    JSON.stringify(portfolio.bio) !== JSON.stringify(portfolio.publishedSnapshot.bio) ||
+    JSON.stringify(portfolio.projects) !== JSON.stringify(portfolio.publishedSnapshot.projects) ||
+    JSON.stringify(portfolio.skills) !== JSON.stringify(portfolio.publishedSnapshot.skills) ||
+    JSON.stringify(portfolio.workExperience) !== JSON.stringify(portfolio.publishedSnapshot.workExperience) ||
+    JSON.stringify(portfolio.blogPosts) !== JSON.stringify(portfolio.publishedSnapshot.blogPosts) ||
+    JSON.stringify(portfolio.contact) !== JSON.stringify(portfolio.publishedSnapshot.contact) ||
+    JSON.stringify(portfolio.modules) !== JSON.stringify(portfolio.publishedSnapshot.modules) ||
+    JSON.stringify(portfolio.theme) !== JSON.stringify(portfolio.publishedSnapshot.theme) ||
+    JSON.stringify(portfolio.seo) !== JSON.stringify(portfolio.publishedSnapshot.seo)
+  )
 
   const missingItems = checkMissingContent(portfolio, modules)
   const criticalMissing = missingItems.filter((m) => m.type === 'warning')
@@ -122,6 +139,11 @@ export default function PublishPanel() {
     navigator.clipboard.writeText(publicUrl)
     setCopiedLink(true)
     setTimeout(() => setCopiedLink(false), 2000)
+  }
+
+  const handleRestoreVersion = (version) => {
+    restoreVersion(username, version)
+    setRestoreConfirmVersion(null)
   }
 
   const handleCustomDomainChange = (e) => {
@@ -157,7 +179,7 @@ export default function PublishPanel() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
+            onClick={() => navigate(previewUrl)}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-primary border border-primary hover:bg-primary/5 transition-colors"
           >
             <Eye size={16} />
@@ -165,7 +187,7 @@ export default function PublishPanel() {
           </button>
           {isPublished && (
             <button
-              onClick={() => window.open(`/u/${username}`, '_blank', 'noopener,noreferrer')}
+              onClick={() => window.open(localPublicUrl, '_blank', 'noopener,noreferrer')}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white bg-primary hover:bg-primary/90 transition-colors"
             >
               <ExternalLink size={16} />
@@ -174,6 +196,18 @@ export default function PublishPanel() {
           )}
         </div>
       </div>
+
+      {hasDraftChanges && (
+        <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 flex items-start gap-3">
+          <AlertTriangle size={18} className="text-amber-500 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">草稿有未发布的更改</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+              你在编辑区修改了内容，这些更改目前只在实时预览中可见。访客看到的仍然是上次发布的版本，确认发布后才会更新公开链接。
+            </p>
+          </div>
+        </div>
+      )}
 
       <section className="bg-surface dark:bg-surface-dark-alt rounded-xl border border-border dark:border-border-dark p-5 space-y-4">
         <div className="flex items-start justify-between gap-4">
@@ -202,6 +236,12 @@ export default function PublishPanel() {
                     {formatDate(lastPublishedAt)}
                   </span>
                 )}
+                {hasDraftChanges && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                    <FileText size={12} />
+                    有未发布更改
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -216,28 +256,42 @@ export default function PublishPanel() {
         {isPublished ? (
           <div className="space-y-4 pt-2">
             <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4">
-              <p className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">你的作品集已上线，公开链接：</p>
-              <div className="flex items-center gap-2">
-                <a
-                  href={publicUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 text-sm font-mono text-blue-600 dark:text-blue-400 hover:underline truncate"
-                >
-                  {publicUrl}
-                </a>
-                <button
-                  onClick={handleCopyLink}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
-                >
-                  {copiedLink ? <Check size={14} /> : <Copy size={14} />}
-                  {copiedLink ? '已复制' : '复制链接'}
-                </button>
+              <p className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">你的作品集已上线</p>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-blue-600 dark:text-blue-400 shrink-0">公开链接</span>
+                  <a
+                    href={publicUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 text-sm font-mono text-blue-600 dark:text-blue-400 hover:underline truncate"
+                  >
+                    {publicUrl}
+                  </a>
+                  <button
+                    onClick={handleCopyLink}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                  >
+                    {copiedLink ? <Check size={14} /> : <Copy size={14} />}
+                    {copiedLink ? '已复制' : '复制链接'}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-blue-600 dark:text-blue-400 shrink-0">本地访问</span>
+                  <a
+                    href={localPublicUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 text-sm font-mono text-blue-600 dark:text-blue-400 hover:underline truncate"
+                  >
+                    {window.location.origin}{localPublicUrl}
+                  </a>
+                </div>
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
+                onClick={() => navigate(previewUrl)}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-primary border border-primary hover:bg-primary/5 transition-colors"
               >
                 <Eye size={16} />
@@ -290,7 +344,7 @@ export default function PublishPanel() {
             )}
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
+                onClick={() => navigate(previewUrl)}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-primary border border-primary hover:bg-primary/5 transition-colors"
               >
                 <Eye size={16} />
@@ -308,13 +362,108 @@ export default function PublishPanel() {
         )}
       </section>
 
+      {publishHistory.length > 0 && (
+        <section className="bg-surface dark:bg-surface-dark-alt rounded-xl border border-border dark:border-border-dark p-5 space-y-4">
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="w-full flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              <History size={18} className="text-primary" />
+              <h3 className="text-lg font-semibold text-text dark:text-text-dark">版本历史</h3>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-text-muted dark:text-text-dark-muted">
+                {publishHistory.length} 个版本
+              </span>
+            </div>
+            {showHistory ? <ChevronUp size={18} className="text-text-muted dark:text-text-dark-muted" /> : <ChevronDown size={18} className="text-text-muted dark:text-text-dark-muted" />}
+          </button>
+
+          {showHistory && (
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {publishHistory.map((entry) => (
+                <div
+                  key={entry.version}
+                  className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                    entry.version === publishVersion
+                      ? 'border-primary/30 bg-primary/5 dark:bg-primary/10'
+                      : 'border-border dark:border-border-dark hover:bg-surface-alt dark:hover:bg-surface-dark'
+                  }`}
+                >
+                  <div className="shrink-0 mt-0.5">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                      entry.version === publishVersion
+                        ? 'bg-primary text-white'
+                        : 'bg-slate-100 dark:bg-slate-800 text-text-muted dark:text-text-dark-muted'
+                    }`}>
+                      {entry.version}
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-text dark:text-text-dark">v{entry.version}</span>
+                      {entry.version === publishVersion && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">当前版本</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1 text-xs text-text-muted dark:text-text-dark-muted">
+                      <Clock size={12} />
+                      {formatDate(entry.publishedAt)}
+                    </div>
+                    <p className="mt-1.5 text-sm text-text-secondary dark:text-text-dark-secondary truncate">
+                      {entry.summary}
+                    </p>
+                  </div>
+                  {entry.version !== publishVersion && (
+                    <button
+                      onClick={() => setRestoreConfirmVersion(entry.version)}
+                      className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 dark:text-amber-400 dark:bg-amber-900/20 dark:hover:bg-amber-900/30 transition-colors"
+                    >
+                      <RotateCcw size={12} />
+                      恢复
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {restoreConfirmVersion && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface dark:bg-surface-dark rounded-xl border border-border dark:border-border-dark max-w-md w-full shadow-2xl animate-fade-in">
+            <div className="p-5 border-b border-border dark:border-border-dark">
+              <h3 className="text-lg font-semibold text-text dark:text-text-dark">恢复到版本 v{restoreConfirmVersion}</h3>
+              <p className="text-sm text-text-muted dark:text-text-dark-muted mt-1">
+                这将用该版本的内容替换你当前的草稿，但你仍需重新发布才能更新公开链接
+              </p>
+            </div>
+            <div className="p-5 flex gap-2 justify-end">
+              <button
+                onClick={() => setRestoreConfirmVersion(null)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-text-muted dark:text-text-dark-muted hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => handleRestoreVersion(restoreConfirmVersion)}
+                className="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 transition-colors"
+              >
+                <RotateCcw size={16} />
+                确认恢复
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showPublishConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-surface dark:bg-surface-dark rounded-xl border border-border dark:border-border-dark max-w-md w-full shadow-2xl animate-fade-in">
             <div className="p-5 border-b border-border dark:border-border-dark">
               <h3 className="text-lg font-semibold text-text dark:text-text-dark">确认发布作品集</h3>
               <p className="text-sm text-text-muted dark:text-text-dark-muted mt-1">
-                发布后将生成公开链接，任何人都可以访问
+                发布后，公开链接将展示当前草稿的快照，访客看到的是此版本的内容
               </p>
             </div>
             <div className="p-5">
@@ -460,11 +609,11 @@ export default function PublishPanel() {
               实时预览
             </h3>
             <p className="text-sm text-text-muted dark:text-text-dark-muted mt-1">
-              实时预览你的作品集效果，切换模块、模板、主题时会即时更新，不会计入访客统计
+              预览当前草稿的效果，切换模块、模板、主题时会即时更新，不会计入访客统计，不会影响已发布的公开页面
             </p>
           </div>
           <button
-            onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
+            onClick={() => navigate(previewUrl)}
             className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white bg-primary hover:bg-primary/90 transition-colors"
           >
             打开预览

@@ -71,13 +71,20 @@ export default function PortfolioViewPage() {
   const [visitRecorded, setVisitRecorded] = useState(false)
 
   const portfolioData = getPortfolioByUsername(username)
-  const portfolio = portfolioData || {}
   const exists = !!portfolioData
-  const isPublished = portfolio.isPublished
+  const isPublished = portfolioData?.isPublished || false
+
+  const snapshot = portfolioData?.publishedSnapshot || null
+  const portfolio = (isPublished && snapshot) ? snapshot : (portfolioData || {})
 
   useEffect(() => {
     if (exists && isPublished && !visitRecorded) {
-      recordVisit(username)
+      let visitorId = localStorage.getItem('folio_visitor_id')
+      if (!visitorId) {
+        visitorId = crypto.randomUUID()
+        localStorage.setItem('folio_visitor_id', visitorId)
+      }
+      recordVisit(username, visitorId)
       setVisitRecorded(true)
     }
   }, [exists, isPublished, visitRecorded, username, recordVisit])

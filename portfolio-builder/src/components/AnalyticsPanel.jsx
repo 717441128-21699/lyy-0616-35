@@ -65,7 +65,7 @@ export default function AnalyticsPanel() {
 
   const avgRatio = uv > 0 ? (pv / uv).toFixed(2) : '—'
 
-  const hasData = pv > 0 || uv > 0 || regions.length > 0
+  const hasData = pv > 0 || uv > 0 || recentVisits.length > 0
 
   const displayRegions = useMemo(() => {
     if (!regions || regions.length === 0) return []

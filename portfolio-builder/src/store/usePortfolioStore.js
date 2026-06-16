@@ -1,8 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-const REGIONS = ['北京', '上海', '广州', '深圳', '杭州', '成都', '武汉', '南京']
-
 function createEmptyPortfolio() {
   return {
     bio: '',
@@ -41,10 +39,30 @@ function createEmptyPortfolio() {
       regions: [],
       recentVisits: [],
       trend: [],
+      visitorIds: [],
     },
     publishVersion: 0,
     lastPublishedAt: null,
+    publishedSnapshot: null,
+    publishHistory: [],
   }
+}
+
+function generatePublishSummary(portfolio) {
+  const modules = portfolio.modules || {}
+  const parts = []
+  const bio = portfolio.bio || {}
+  if (modules.bio && bio.name) parts.push(`简介: ${bio.name}`)
+  if (modules.projects && portfolio.projects?.length) parts.push(`${portfolio.projects.length} 个项目`)
+  if (modules.skills && portfolio.skills?.length) parts.push(`${portfolio.skills.length} 项技能`)
+  if (modules.workExperience && portfolio.workExperience?.length) parts.push(`${portfolio.workExperience.length} 段经历`)
+  if (modules.blog && portfolio.blogPosts?.length) parts.push(`${portfolio.blogPosts.length} 篇文章`)
+  if (modules.contact) {
+    const c = portfolio.contact || {}
+    const filled = Object.keys(c).filter((k) => c[k]).length
+    if (filled > 0) parts.push(`${filled} 项联系方式`)
+  }
+  return parts.join('、') || '空作品集'
 }
 
 const usePortfolioStore = create(
@@ -68,6 +86,13 @@ const usePortfolioStore = create(
       getPortfolioByUsername: (username) => {
         const { portfolios } = get()
         return portfolios[username] || null
+      },
+
+      getPublishedSnapshot: (username) => {
+        const { portfolios } = get()
+        const p = portfolios[username]
+        if (!p || !p.isPublished || !p.publishedSnapshot) return null
+        return p.publishedSnapshot
       },
 
       saveCurrent: () => {
@@ -327,11 +352,33 @@ const usePortfolioStore = create(
         set((state) => {
           const currentPortfolio = state.portfolios[username] || state.portfolio
           const newVersion = (currentPortfolio.publishVersion || 0) + 1
+          const now = new Date().toISOString()
+          const snapshot = {
+            bio: currentPortfolio.bio,
+            projects: currentPortfolio.projects,
+            skills: currentPortfolio.skills,
+            workExperience: currentPortfolio.workExperience,
+            blogPosts: currentPortfolio.blogPosts,
+            contact: currentPortfolio.contact,
+            modules: { ...currentPortfolio.modules },
+            theme: { ...currentPortfolio.theme },
+            seo: { ...currentPortfolio.seo },
+          }
+          const summary = generatePublishSummary(currentPortfolio)
+          const historyEntry = {
+            version: newVersion,
+            publishedAt: now,
+            summary,
+            snapshot: JSON.parse(JSON.stringify(snapshot)),
+          }
+          const existingHistory = currentPortfolio.publishHistory || []
           const portfolio = {
             ...currentPortfolio,
             isPublished: true,
             publishVersion: newVersion,
-            lastPublishedAt: new Date().toISOString(),
+            lastPublishedAt: now,
+            publishedSnapshot: snapshot,
+            publishHistory: [historyEntry, ...existingHistory].slice(0, 20),
             domain: {
               ...currentPortfolio.domain,
               subdomain: `${username}.site`,
@@ -362,27 +409,53 @@ const usePortfolioStore = create(
           }
         }),
 
-      recordVisit: (username, region) => {
+      restoreVersion: (username, version) => {
         const { portfolios } = get()
         const targetPortfolio = portfolios[username]
         if (!targetPortfolio) return
 
-        const isUnique = Math.random() > 0.3
-        const visitRegion = region || REGIONS[Math.floor(Math.random() * REGIONS.length)]
+        const history = targetPortfolio.publishHistory || []
+        const entry = history.find((h) => h.version === version)
+        if (!entry || !entry.snapshot) return
+
+        const restored = {
+          ...targetPortfolio,
+          bio: entry.snapshot.bio,
+          projects: JSON.parse(JSON.stringify(entry.snapshot.projects)),
+          skills: [...entry.snapshot.skills],
+          workExperience: JSON.parse(JSON.stringify(entry.snapshot.workExperience)),
+          blogPosts: JSON.parse(JSON.stringify(entry.snapshot.blogPosts)),
+          contact: { ...entry.snapshot.contact },
+          modules: { ...entry.snapshot.modules },
+          theme: { ...entry.snapshot.theme },
+          seo: { ...entry.snapshot.seo },
+        }
+
+        set({
+          portfolios: { ...portfolios, [username]: restored },
+          portfolio: username === get().currentUsername ? restored : get().portfolio,
+        })
+      },
+
+      recordVisit: (username, visitorId) => {
+        const { portfolios } = get()
+        const targetPortfolio = portfolios[username]
+        if (!targetPortfolio) return
+
+        const existingVisitorIds = targetPortfolio.analytics.visitorIds || []
+        const isUnique = !existingVisitorIds.includes(visitorId)
         const now = new Date()
         const dayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
-        const updatedRegions = targetPortfolio.analytics.regions.map((r) =>
-          r.name === visitRegion ? { ...r, count: r.count + 1 } : r
-        )
-        const regionExists = updatedRegions.some((r) => r.name === visitRegion)
-        if (!regionExists) {
-          updatedRegions.push({ name: visitRegion, count: 1 })
-        }
+        const updatedVisitorIds = isUnique
+          ? [...existingVisitorIds, visitorId].slice(-500)
+          : existingVisitorIds
+
+        const updatedRegions = [...(targetPortfolio.analytics.regions || [])]
 
         const recentVisit = {
           id: crypto.randomUUID(),
-          region: visitRegion,
+          region: '未知来源',
           timestamp: now.toISOString(),
           isUnique,
         }
@@ -408,6 +481,7 @@ const usePortfolioStore = create(
             regions: updatedRegions,
             recentVisits: updatedRecent,
             trend: updatedTrend,
+            visitorIds: updatedVisitorIds,
           },
         }
 
