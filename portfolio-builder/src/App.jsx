@@ -8,6 +8,7 @@ import RegisterPage from './pages/RegisterPage';
 import WizardPage from './pages/WizardPage';
 import DashboardPage from './pages/DashboardPage';
 import PortfolioViewPage from './pages/PortfolioViewPage';
+import PortfolioPreview from './pages/PortfolioPreview';
 
 function ProtectedRoute({ children }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -32,6 +33,7 @@ function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/wizard" element={<ProtectedRoute><WizardPage /></ProtectedRoute>} />
       <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+      <Route path="/preview/:username" element={<ProtectedRoute><PortfolioPreview /></ProtectedRoute>} />
       <Route path="/u/:username" element={<PortfolioViewPage />} />
     </Routes>
   );

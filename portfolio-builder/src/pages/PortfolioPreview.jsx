@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   Mail, Phone, Code2, Briefcase, AtSign, Globe,
-  MapPin, Calendar, ExternalLink, ArrowUp, Sun, Moon, MessageCircle, Eye
+  MapPin, Calendar, ExternalLink, ArrowUp, Sun, Moon, MessageCircle, X
 } from 'lucide-react'
 import usePortfolioStore from '../store/usePortfolioStore'
 
@@ -31,56 +31,12 @@ function formatDateRange(item) {
   return start && end ? `${start} — ${end}` : start || end
 }
 
-function UnpublishedPage({ username }) {
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950 flex items-center justify-center p-6">
-      <div className="max-w-md w-full text-center animate-fade-in">
-        <div className="mb-8">
-          <div className="w-20 h-20 mx-auto bg-slate-200 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6">
-            <Eye size={40} className="text-slate-400 dark:text-slate-600" />
-          </div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">
-            作品集暂未发布
-          </h1>
-          <p className="text-slate-500 dark:text-slate-400 mb-2">
-            <span className="font-mono text-sm bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
-              {username}
-            </span>
-          </p>
-          <p className="text-slate-500 dark:text-slate-400 mt-4">
-            该用户的作品集尚未发布或不存在。
-          </p>
-        </div>
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
-        >
-          返回首页
-        </Link>
-      </div>
-    </div>
-  )
-}
-
-export default function PortfolioViewPage() {
+export default function PortfolioPreview() {
+  const navigate = useNavigate()
   const { username } = useParams()
-  const getPortfolioByUsername = usePortfolioStore((s) => s.getPortfolioByUsername)
-  const recordVisit = usePortfolioStore((s) => s.recordVisit)
+  const portfolio = usePortfolioStore((s) => s.portfolio)
   const [showTop, setShowTop] = useState(false)
-  const [isDark, setIsDark] = useState(false)
-  const [visitRecorded, setVisitRecorded] = useState(false)
-
-  const portfolioData = getPortfolioByUsername(username)
-  const portfolio = portfolioData || {}
-  const exists = !!portfolioData
-  const isPublished = portfolio.isPublished
-
-  useEffect(() => {
-    if (exists && isPublished && !visitRecorded) {
-      recordVisit(username)
-      setVisitRecorded(true)
-    }
-  }, [exists, isPublished, visitRecorded, username, recordVisit])
+  const [isDark, setIsDark] = useState(portfolio.theme.darkMode || false)
 
   const bio = portfolio.bio || {}
   const projects = portfolio.projects || []
@@ -96,23 +52,6 @@ export default function PortfolioViewPage() {
   const colorScheme = theme.colorScheme || 'indigo'
   const layout = theme.layout || 'centered'
   const c = COLOR_MAP[colorScheme] || COLOR_MAP.indigo
-
-  useEffect(() => {
-    document.title = seo.title || `${bio.name || username} - 个人作品集`
-    let meta = document.querySelector('meta[name="description"]')
-    if (meta) {
-      meta.setAttribute('content', seo.description || '')
-    } else {
-      meta = document.createElement('meta')
-      meta.name = 'description'
-      meta.content = seo.description || ''
-      document.head.appendChild(meta)
-    }
-  }, [seo.title, seo.description, bio.name, username])
-
-  useEffect(() => {
-    setIsDark(theme.darkMode || false)
-  }, [theme.darkMode])
 
   useEffect(() => {
     if (isDark) {
@@ -142,10 +81,6 @@ export default function PortfolioViewPage() {
   const cardBorder = isDark ? 'border-gray-800' : 'border-gray-200'
   const surfaceBg = isDark ? 'bg-gray-900/50' : 'bg-gray-50'
 
-  if (!exists || !isPublished) {
-    return <UnpublishedPage username={username} />
-  }
-
   const heroSection = () => {
     if (!modules.bio) return null
     if (templateId === 'modern') {
@@ -160,16 +95,18 @@ export default function PortfolioViewPage() {
               )}
               {!bio.avatar && (
                 <div className="h-28 w-28 rounded-full border-4 border-white/30 bg-white/20 flex items-center justify-center shadow-2xl mb-6 text-4xl font-bold text-white">
-                  {(bio.name || 'U')[0]}
+                  {(typeof bio === 'object' ? (bio.name || 'U') : 'U')[0]}
                 </div>
               )}
-              <h1 className="text-4xl sm:text-5xl font-bold text-white tracking-tight">{bio.name || username}</h1>
-              {bio.title && <p className="mt-3 text-xl text-white/80 font-light">{bio.title}</p>}
+              <h1 className="text-4xl sm:text-5xl font-bold text-white tracking-tight">
+                {typeof bio === 'object' ? (bio.name || username) : username}
+              </h1>
+              {typeof bio === 'object' && bio.title && <p className="mt-3 text-xl text-white/80 font-light">{bio.title}</p>}
               <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-white/70 text-sm">
-                {bio.location && <span className="flex items-center gap-1.5"><MapPin size={15} />{bio.location}</span>}
-                {bio.email && <span className="flex items-center gap-1.5"><Mail size={15} />{bio.email}</span>}
+                {typeof bio === 'object' && bio.location && <span className="flex items-center gap-1.5"><MapPin size={15} />{bio.location}</span>}
+                {typeof bio === 'object' && bio.email && <span className="flex items-center gap-1.5"><Mail size={15} />{bio.email}</span>}
               </div>
-              {bio.bio && <p className="mt-6 max-w-2xl text-white/70 leading-relaxed">{bio.bio}</p>}
+              {typeof bio === 'object' && bio.bio && <p className="mt-6 max-w-2xl text-white/70 leading-relaxed">{bio.bio}</p>}
             </div>
           </div>
         </section>
@@ -179,14 +116,16 @@ export default function PortfolioViewPage() {
       return (
         <section className="pt-20 pb-12">
           <div className="text-center">
-            <h1 className={`text-4xl sm:text-5xl font-light tracking-tight ${textPrimary}`}>{bio.name || username}</h1>
-            {bio.title && <p className={`mt-3 text-lg ${textSecondary} font-light`}>{bio.title}</p>}
-            {bio.location && (
+            <h1 className={`text-4xl sm:text-5xl font-light tracking-tight ${textPrimary}`}>
+              {typeof bio === 'object' ? (bio.name || username) : username}
+            </h1>
+            {typeof bio === 'object' && bio.title && <p className={`mt-3 text-lg ${textSecondary} font-light`}>{bio.title}</p>}
+            {typeof bio === 'object' && bio.location && (
               <p className={`mt-2 flex items-center justify-center gap-1.5 text-sm ${textMuted}`}>
                 <MapPin size={14} />{bio.location}
               </p>
             )}
-            {bio.bio && <p className={`mt-6 max-w-xl mx-auto leading-relaxed ${textSecondary}`}>{bio.bio}</p>}
+            {typeof bio === 'object' && bio.bio && <p className={`mt-6 max-w-xl mx-auto leading-relaxed ${textSecondary}`}>{bio.bio}</p>}
           </div>
           <div className={`mt-10 h-px ${isDark ? 'bg-gray-800' : 'bg-gray-200'}`} />
         </section>
@@ -203,17 +142,19 @@ export default function PortfolioViewPage() {
           )}
           {!bio.avatar && (
             <div className={`mx-auto h-32 w-32 rounded-2xl ${c.bg} flex items-center justify-center shadow-xl mb-6 text-5xl font-black text-white rotate-3 hover:rotate-0 transition-transform duration-300`}>
-              {(bio.name || 'U')[0]}
+              {(typeof bio === 'object' ? (bio.name || 'U') : 'U')[0]}
             </div>
           )}
-          <h1 className={`text-5xl sm:text-6xl font-black ${textPrimary} tracking-tight`}>{bio.name || username}</h1>
-          {bio.title && <p className={`mt-2 text-xl ${c.text} font-bold`}>{bio.title}</p>}
-          {bio.location && (
+          <h1 className={`text-5xl sm:text-6xl font-black ${textPrimary} tracking-tight`}>
+            {typeof bio === 'object' ? (bio.name || username) : username}
+          </h1>
+          {typeof bio === 'object' && bio.title && <p className={`mt-2 text-xl ${c.text} font-bold`}>{bio.title}</p>}
+          {typeof bio === 'object' && bio.location && (
             <p className={`mt-3 flex items-center justify-center gap-1.5 text-sm ${textSecondary}`}>
               <MapPin size={15} className={c.text} />{bio.location}
             </p>
           )}
-          {bio.bio && <p className={`mt-6 max-w-2xl mx-auto leading-relaxed ${textSecondary}`}>{bio.bio}</p>}
+          {typeof bio === 'object' && bio.bio && <p className={`mt-6 max-w-2xl mx-auto leading-relaxed ${textSecondary}`}>{bio.bio}</p>}
         </div>
       </section>
     )
@@ -495,13 +436,15 @@ export default function PortfolioViewPage() {
                       <img src={bio.avatar} alt={bio.name} className="mx-auto h-20 w-20 rounded-full object-cover border-2 border-gray-200 mb-3" onError={(e) => { e.target.style.display = 'none' }} />
                     ) : (
                       <div className={`mx-auto h-20 w-20 rounded-full ${c.bg} flex items-center justify-center text-2xl font-bold text-white mb-3`}>
-                        {(bio.name || 'U')[0]}
+                        {(typeof bio === 'object' ? (bio.name || 'U') : 'U')[0]}
                       </div>
                     )}
-                    <h2 className={`font-bold ${textPrimary}`}>{bio.name || username}</h2>
-                    {bio.title && <p className={`text-sm ${textSecondary} mt-1`}>{bio.title}</p>}
-                    {bio.location && <p className={`text-xs ${textMuted} mt-1 flex items-center justify-center gap-1`}><MapPin size={12} />{bio.location}</p>}
-                    {bio.bio && <p className={`mt-4 text-sm ${textSecondary} leading-relaxed`}>{bio.bio}</p>}
+                    <h2 className={`font-bold ${textPrimary}`}>
+                      {typeof bio === 'object' ? (bio.name || username) : username}
+                    </h2>
+                    {typeof bio === 'object' && bio.title && <p className={`text-sm ${textSecondary} mt-1`}>{bio.title}</p>}
+                    {typeof bio === 'object' && bio.location && <p className={`text-xs ${textMuted} mt-1 flex items-center justify-center gap-1`}><MapPin size={12} />{bio.location}</p>}
+                    {typeof bio === 'object' && bio.bio && <p className={`mt-4 text-sm ${textSecondary} leading-relaxed`}>{bio.bio}</p>}
                   </div>
                 )}
                 {modules.contact && CONTACT_FIELDS.some((f) => contact[f.key]) && (
@@ -542,6 +485,32 @@ export default function PortfolioViewPage() {
 
   return (
     <div className={`min-h-screen ${baseBg} transition-colors duration-300`}>
+      <div className="sticky top-0 z-50 bg-indigo-600 text-white px-4 py-2.5 flex items-center justify-between shadow-lg">
+        <div className="flex items-center gap-2 text-sm">
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/20 text-xs font-medium">
+            <Eye size={12} />
+            预览模式
+          </span>
+          <span className="text-white/80 hidden sm:inline">更改会实时更新，不计入访客统计</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleDark}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-sm"
+          >
+            {isDark ? <Sun size={14} /> : <Moon size={14} />}
+            {isDark ? '亮色' : '暗色'}
+          </button>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-sm font-medium"
+          >
+            <X size={14} />
+            退出预览
+          </button>
+        </div>
+      </div>
+
       {layout === 'sidebar' ? layoutWrap(pageContent) : layoutWrap(pageContent)}
 
       <footer className={`border-t ${cardBorder} ${isDark ? 'bg-gray-900/50' : 'bg-gray-50'} mt-8`}>
@@ -552,18 +521,10 @@ export default function PortfolioViewPage() {
         </div>
       </footer>
 
-      <button
-        onClick={toggleDark}
-        className={`fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full ${c.bg} text-white shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-transform duration-200`}
-        aria-label="Toggle dark mode"
-      >
-        {isDark ? <Sun size={20} /> : <Moon size={20} />}
-      </button>
-
       {showTop && (
         <button
           onClick={scrollToTop}
-          className={`fixed bottom-20 right-6 z-50 w-12 h-12 rounded-full ${cardBg} border ${cardBorder} shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-200 ${textSecondary}`}
+          className={`fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full ${cardBg} border ${cardBorder} shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-200 ${textSecondary}`}
           aria-label="Back to top"
         >
           <ArrowUp size={20} />

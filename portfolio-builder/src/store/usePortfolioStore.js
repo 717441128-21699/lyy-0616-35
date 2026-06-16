@@ -39,7 +39,11 @@ function createEmptyPortfolio() {
       pv: 0,
       uv: 0,
       regions: [],
+      recentVisits: [],
+      trend: [],
     },
+    publishVersion: 0,
+    lastPublishedAt: null,
   }
 }
 
@@ -321,32 +325,37 @@ const usePortfolioStore = create(
 
       publish: (username) =>
         set((state) => {
+          const currentPortfolio = state.portfolios[username] || state.portfolio
+          const newVersion = (currentPortfolio.publishVersion || 0) + 1
           const portfolio = {
-            ...state.portfolio,
+            ...currentPortfolio,
             isPublished: true,
+            publishVersion: newVersion,
+            lastPublishedAt: new Date().toISOString(),
             domain: {
-              ...state.portfolio.domain,
+              ...currentPortfolio.domain,
               subdomain: `${username}.site`,
             },
           }
           return {
-            portfolio,
+            portfolio: username === state.currentUsername ? portfolio : state.portfolio,
             portfolios: { ...state.portfolios, [username]: portfolio },
           }
         }),
 
       unpublish: (username) =>
         set((state) => {
+          const currentPortfolio = state.portfolios[username] || state.portfolio
           const portfolio = {
-            ...state.portfolio,
+            ...currentPortfolio,
             isPublished: false,
             domain: {
-              ...state.portfolio.domain,
+              ...currentPortfolio.domain,
               subdomain: '',
             },
           }
           return {
-            portfolio,
+            portfolio: username === state.currentUsername ? portfolio : state.portfolio,
             portfolios: username
               ? { ...state.portfolios, [username]: portfolio }
               : state.portfolios,
@@ -360,6 +369,9 @@ const usePortfolioStore = create(
 
         const isUnique = Math.random() > 0.3
         const visitRegion = region || REGIONS[Math.floor(Math.random() * REGIONS.length)]
+        const now = new Date()
+        const dayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
         const updatedRegions = targetPortfolio.analytics.regions.map((r) =>
           r.name === visitRegion ? { ...r, count: r.count + 1 } : r
         )
@@ -368,12 +380,34 @@ const usePortfolioStore = create(
           updatedRegions.push({ name: visitRegion, count: 1 })
         }
 
+        const recentVisit = {
+          id: crypto.randomUUID(),
+          region: visitRegion,
+          timestamp: now.toISOString(),
+          isUnique,
+        }
+        const existingRecent = targetPortfolio.analytics.recentVisits || []
+        const updatedRecent = [recentVisit, ...existingRecent].slice(0, 50)
+
+        const existingTrend = targetPortfolio.analytics.trend || []
+        const dayIndex = existingTrend.findIndex((d) => d.date === dayKey)
+        let updatedTrend
+        if (dayIndex >= 0) {
+          updatedTrend = existingTrend.map((d, i) =>
+            i === dayIndex ? { ...d, pv: d.pv + 1, uv: d.uv + (isUnique ? 1 : 0) } : d
+          )
+        } else {
+          updatedTrend = [...existingTrend, { date: dayKey, pv: 1, uv: isUnique ? 1 : 0 }].slice(-7)
+        }
+
         const updatedPortfolio = {
           ...targetPortfolio,
           analytics: {
             pv: targetPortfolio.analytics.pv + 1,
             uv: targetPortfolio.analytics.uv + (isUnique ? 1 : 0),
             regions: updatedRegions,
+            recentVisits: updatedRecent,
+            trend: updatedTrend,
           },
         }
 

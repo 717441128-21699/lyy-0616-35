@@ -2,7 +2,68 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../store/useAuthStore'
 import usePortfolioStore from '../store/usePortfolioStore'
-import { Globe, Copy, Check, ExternalLink, Unplug, ShieldCheck, XCircle } from 'lucide-react'
+import {
+  Globe, Copy, Check, ExternalLink, Unplug, ShieldCheck, XCircle,
+  Eye, AlertTriangle, Calendar, Tag, ChevronRight, Sparkles
+} from 'lucide-react'
+
+function checkMissingContent(portfolio, modules) {
+  const missing = []
+  const bio = portfolio.bio || {}
+  const bioIsObject = typeof bio === 'object'
+
+  if (!modules.bio) missing.push({ key: 'bio', label: '个人简介', section: '内容模块', reason: '已关闭显示', type: 'info' })
+  if (modules.bio && (!bio || (bioIsObject && !bio.name))) {
+    missing.push({ key: 'bio', label: '个人简介-姓名', section: '基础信息', reason: '未填写姓名', type: 'warning' })
+  }
+  if (modules.bio && (!bio || (bioIsObject && !bio.title))) {
+    missing.push({ key: 'bio', label: '个人简介-职位', section: '基础信息', reason: '未填写职位头衔', type: 'warning' })
+  }
+
+  if (!modules.projects) missing.push({ key: 'projects', label: '项目经历', section: '内容模块', reason: '已关闭显示', type: 'info' })
+  if (modules.projects && (!portfolio.projects || portfolio.projects.length === 0)) {
+    missing.push({ key: 'projects', label: '项目经历', section: '作品内容', reason: '未添加任何项目', type: 'warning' })
+  }
+
+  if (!modules.skills) missing.push({ key: 'skills', label: '技能标签', section: '内容模块', reason: '已关闭显示', type: 'info' })
+  if (modules.skills && (!portfolio.skills || portfolio.skills.length === 0)) {
+    missing.push({ key: 'skills', label: '技能标签', section: '个人能力', reason: '未添加任何技能', type: 'info' })
+  }
+
+  if (!modules.workExperience) missing.push({ key: 'workExperience', label: '工作经历', section: '内容模块', reason: '已关闭显示', type: 'info' })
+  if (modules.workExperience && (!portfolio.workExperience || portfolio.workExperience.length === 0)) {
+    missing.push({ key: 'workExperience', label: '工作经历', section: '职业背景', reason: '未添加任何工作经历', type: 'warning' })
+  }
+
+  if (!modules.blog) missing.push({ key: 'blog', label: '博客文章', section: '内容模块', reason: '已关闭显示', type: 'info' })
+
+  if (!modules.contact) missing.push({ key: 'contact', label: '联系方式', section: '内容模块', reason: '已关闭显示', type: 'info' })
+  if (modules.contact) {
+    const contact = portfolio.contact || {}
+    const hasContact = contact.email || contact.phone || contact.github || contact.website
+    if (!hasContact) {
+      missing.push({ key: 'contact', label: '联系方式', section: '联系信息', reason: '未填写任何联系方式', type: 'info' })
+    }
+  }
+
+  const seo = portfolio.seo || {}
+  if (!seo.title || !seo.description) {
+    missing.push({ key: 'seo', label: 'SEO 设置', section: '优化配置', reason: '未填写 SEO 标题或描述', type: 'info' })
+  }
+
+  return missing
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const hour = String(d.getHours()).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day} ${hour}:${min}`
+}
 
 export default function PublishPanel() {
   const navigate = useNavigate()
@@ -16,13 +77,35 @@ export default function PublishPanel() {
   const [verifying, setVerifying] = useState(false)
   const [verifyResult, setVerifyResult] = useState(null)
   const [copied, setCopied] = useState(false)
+  const [copiedLink, setCopiedLink] = useState(false)
+  const [showPublishConfirm, setShowPublishConfirm] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [publishSuccess, setPublishSuccess] = useState(false)
 
   const username = user?.username || ''
   const subdomain = `${username}.site`
+  const publicUrl = `https://${subdomain}`
+  const previewUrl = `/preview/${username}`
   const isPublished = portfolio.isPublished
+  const publishVersion = portfolio.publishVersion || 0
+  const lastPublishedAt = portfolio.lastPublishedAt
+  const modules = portfolio.modules || {}
 
-  const handlePublish = () => {
-    publish(username)
+  const missingItems = checkMissingContent(portfolio, modules)
+  const criticalMissing = missingItems.filter((m) => m.type === 'warning')
+  const hasCriticalIssues = criticalMissing.length > 0
+
+  const handlePublish = async () => {
+    setPublishing(true)
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      publish(username)
+      setPublishSuccess(true)
+      setTimeout(() => setPublishSuccess(false), 3000)
+    } finally {
+      setPublishing(false)
+      setShowPublishConfirm(false)
+    }
   }
 
   const handleUnpublish = () => {
@@ -33,6 +116,12 @@ export default function PublishPanel() {
     navigator.clipboard.writeText(subdomain)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(publicUrl)
+    setCopiedLink(true)
+    setTimeout(() => setCopiedLink(false), 2000)
   }
 
   const handleCustomDomainChange = (e) => {
@@ -61,37 +150,99 @@ export default function PublishPanel() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h2 className="text-2xl font-bold text-text dark:text-text-dark">发布管理</h2>
-        <p className="text-text-muted dark:text-text-dark-muted mt-1">管理作品集的发布状态和域名配置</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-text dark:text-text-dark">发布管理</h2>
+          <p className="text-text-muted dark:text-text-dark-muted mt-1">管理作品集的发布状态和域名配置</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-primary border border-primary hover:bg-primary/5 transition-colors"
+          >
+            <Eye size={16} />
+            实时预览
+          </button>
+          {isPublished && (
+            <button
+              onClick={() => window.open(`/u/${username}`, '_blank', 'noopener,noreferrer')}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white bg-primary hover:bg-primary/90 transition-colors"
+            >
+              <ExternalLink size={16} />
+              访问公开页
+            </button>
+          )}
+        </div>
       </div>
 
       <section className="bg-surface dark:bg-surface-dark-alt rounded-xl border border-border dark:border-border-dark p-5 space-y-4">
-        <h3 className="text-lg font-semibold text-text dark:text-text-dark flex items-center gap-2">
-          <Globe size={20} className="text-primary" />
-          发布状态
-        </h3>
-        {isPublished ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                <Check size={14} />
-                已发布
-              </span>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className={`p-2 rounded-lg ${isPublished ? 'bg-green-100 dark:bg-green-900/30' : 'bg-slate-100 dark:bg-slate-800'}`}>
+              <Globe size={20} className={isPublished ? 'text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'} />
             </div>
-            <p className="text-sm text-text-muted dark:text-text-dark-muted">
-              你的作品集已上线，可通过以下地址访问：
-            </p>
-            <a
-              href={`https://${subdomain}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-primary hover:underline font-medium"
-            >
-              {subdomain}
-              <ExternalLink size={14} />
-            </a>
             <div>
+              <h3 className="text-lg font-semibold text-text dark:text-text-dark">
+                发布状态
+              </h3>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${isPublished ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
+                  {isPublished ? <Check size={12} /> : <XCircle size={12} />}
+                  {isPublished ? '已发布' : '未发布'}
+                </span>
+                {isPublished && publishVersion > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                    <Tag size={12} />
+                    版本 v{publishVersion}
+                  </span>
+                )}
+                {isPublished && lastPublishedAt && (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-text-muted dark:text-text-dark-muted">
+                    <Calendar size={12} />
+                    {formatDate(lastPublishedAt)}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          {publishSuccess && (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-sm font-medium animate-fade-in">
+              <Check size={16} />
+              发布成功！
+            </div>
+          )}
+        </div>
+
+        {isPublished ? (
+          <div className="space-y-4 pt-2">
+            <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4">
+              <p className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">你的作品集已上线，公开链接：</p>
+              <div className="flex items-center gap-2">
+                <a
+                  href={publicUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 text-sm font-mono text-blue-600 dark:text-blue-400 hover:underline truncate"
+                >
+                  {publicUrl}
+                </a>
+                <button
+                  onClick={handleCopyLink}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                >
+                  {copiedLink ? <Check size={14} /> : <Copy size={14} />}
+                  {copiedLink ? '已复制' : '复制链接'}
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-primary border border-primary hover:bg-primary/5 transition-colors"
+              >
+                <Eye size={16} />
+                打开实时预览
+              </button>
               <button
                 onClick={handleUnpublish}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-900/20 dark:hover:bg-red-900/30 transition-colors"
@@ -100,28 +251,131 @@ export default function PublishPanel() {
                 取消发布
               </button>
             </div>
+            <p className="text-xs text-text-muted dark:text-text-dark-muted">
+              取消发布后，公开链接将显示未发布页面，但编辑区和预览内容都会保留。
+            </p>
           </div>
         ) : (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                <XCircle size={14} />
-                未发布
-              </span>
+          <div className="space-y-4 pt-2">
+            {missingItems.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-text dark:text-text-dark flex items-center gap-1.5">
+                  <AlertTriangle size={16} className="text-amber-500" />
+                  发布前检查（{criticalMissing.length} 项待完善）：
+                </p>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {missingItems.map((item, i) => (
+                    <div
+                      key={i}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
+                        item.type === 'warning'
+                          ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800'
+                          : 'bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      <span className={`shrink-0 ${item.type === 'warning' ? 'text-amber-500' : 'text-slate-400'}`}>
+                        {item.type === 'warning' ? <AlertTriangle size={14} /> : <XCircle size={14} />}
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded bg-white dark:bg-slate-700 text-text-muted dark:text-text-dark-muted shrink-0">
+                        {item.section}
+                      </span>
+                      <span className="font-medium text-text dark:text-text-dark">{item.label}</span>
+                      <span className="text-text-muted dark:text-text-dark-muted ml-auto">
+                        {item.reason}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-primary border border-primary hover:bg-primary/5 transition-colors"
+              >
+                <Eye size={16} />
+                先预览效果
+              </button>
+              <button
+                onClick={() => setShowPublishConfirm(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white bg-primary hover:bg-primary/90 transition-colors"
+              >
+                <Sparkles size={16} />
+                {hasCriticalIssues ? '仍要发布' : '立即发布'}
+              </button>
             </div>
-            <p className="text-sm text-text-muted dark:text-text-dark-muted">
-              点击下方按钮将你的作品集发布到互联网上
-            </p>
-            <button
-              onClick={handlePublish}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white bg-primary hover:bg-primary/90 transition-colors"
-            >
-              <Globe size={16} />
-              发布作品集
-            </button>
           </div>
         )}
       </section>
+
+      {showPublishConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface dark:bg-surface-dark rounded-xl border border-border dark:border-border-dark max-w-md w-full shadow-2xl animate-fade-in">
+            <div className="p-5 border-b border-border dark:border-border-dark">
+              <h3 className="text-lg font-semibold text-text dark:text-text-dark">确认发布作品集</h3>
+              <p className="text-sm text-text-muted dark:text-text-dark-muted mt-1">
+                发布后将生成公开链接，任何人都可以访问
+              </p>
+            </div>
+            <div className="p-5">
+              {hasCriticalIssues && (
+                <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                    <AlertTriangle size={14} />
+                    仍有 {criticalMissing.length} 项内容待完善
+                  </p>
+                  <div className="mt-2 space-y-1">
+                    {criticalMissing.slice(0, 3).map((item, i) => (
+                      <p key={i} className="text-xs text-amber-700 dark:text-amber-400">
+                        • {item.label}：{item.reason}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="space-y-2 text-sm text-text dark:text-text-dark">
+                <p>发布内容包括：</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(modules).filter(([_, v]) => v).map(([key]) => {
+                    const labels = { bio: '个人简介', projects: '项目经历', skills: '技能标签', workExperience: '工作经历', blog: '博客文章', contact: '联系方式' }
+                    return (
+                      <div key={key} className="flex items-center gap-2 text-sm">
+                        <Check size={14} className="text-green-500" />
+                        {labels[key] || key}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+              <div className="mt-5 flex gap-2 justify-end">
+                <button
+                  onClick={() => setShowPublishConfirm(false)}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-text-muted dark:text-text-dark-muted hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handlePublish}
+                  disabled={publishing}
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                >
+                  {publishing ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      发布中
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={16} />
+                      确认发布
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section className="bg-surface dark:bg-surface-dark-alt rounded-xl border border-border dark:border-border-dark p-5 space-y-4">
         <h3 className="text-lg font-semibold text-text dark:text-text-dark">专属子域名</h3>
@@ -168,7 +422,10 @@ export default function PublishPanel() {
                 验证中
               </>
             ) : (
-              '验证CNAME'
+              <>
+                <ShieldCheck size={16} />
+                验证CNAME
+              </>
             )}
           </button>
         </div>
@@ -195,24 +452,25 @@ export default function PublishPanel() {
         )}
       </section>
 
-      <section className="bg-surface dark:bg-surface-dark-alt rounded-xl border border-border dark:border-border-dark p-5 space-y-4">
-        <h3 className="text-lg font-semibold text-text dark:text-text-dark">预览链接</h3>
-        <p className="text-sm text-text-muted dark:text-text-dark-muted">
-          在发布前预览你的作品集效果
-        </p>
-        <a
-          href={`/u/${username}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => {
-            e.preventDefault()
-            navigate(`/u/${username}`)
-          }}
-          className="inline-flex items-center gap-2 text-primary hover:underline font-medium"
-        >
-          <ExternalLink size={16} />
-          /u/{username}
-        </a>
+      <section className="bg-gradient-to-r from-primary/10 to-transparent dark:from-primary/20 dark:to-transparent rounded-xl border border-primary/20 dark:border-primary/30 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-text dark:text-text-dark flex items-center gap-2">
+              <Eye size={18} className="text-primary" />
+              实时预览
+            </h3>
+            <p className="text-sm text-text-muted dark:text-text-dark-muted mt-1">
+              实时预览你的作品集效果，切换模块、模板、主题时会即时更新，不会计入访客统计
+            </p>
+          </div>
+          <button
+            onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
+            className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white bg-primary hover:bg-primary/90 transition-colors"
+          >
+            打开预览
+            <ChevronRight size={16} />
+          </button>
+        </div>
       </section>
     </div>
   )
