@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import useAuthStore from './store/useAuthStore';
+import usePortfolioStore from './store/usePortfolioStore';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -13,6 +15,16 @@ function ProtectedRoute({ children }) {
 }
 
 function App() {
+  const user = useAuthStore((s) => s.user);
+  const currentUsername = usePortfolioStore((s) => s.currentUsername);
+  const initForUser = usePortfolioStore((s) => s.initForUser);
+
+  useEffect(() => {
+    if (user && user.username !== currentUsername) {
+      initForUser(user.username);
+    }
+  }, [user, currentUsername, initForUser]);
+
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />

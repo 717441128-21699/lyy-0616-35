@@ -1,12 +1,15 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import usePortfolioStore from '../store/usePortfolioStore'
 import useAuthStore from '../store/useAuthStore'
 import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
+import { FileDown, Loader2 } from 'lucide-react'
 
 export default function PDFResume() {
   const portfolio = usePortfolioStore((s) => s.portfolio)
   const user = useAuthStore((s) => s.user)
   const [generating, setGenerating] = useState(false)
+  const resumeRef = useRef(null)
 
   const bio = portfolio.bio || {}
   const contact = portfolio.contact || {}
@@ -14,231 +17,223 @@ export default function PDFResume() {
   const workExperience = portfolio.workExperience || []
   const projects = portfolio.projects || []
 
-  const generatePDF = () => {
+  const generatePDF = async () => {
+    if (!resumeRef.current) return
     setGenerating(true)
     try {
-      const doc = new jsPDF()
-      const pageWidth = doc.internal.pageSize.getWidth()
-      const margin = 20
-      const contentWidth = pageWidth - margin * 2
-      let y = 20
+      const element = resumeRef.current
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
+      })
 
-      doc.setFontSize(22)
-      doc.setFont('helvetica', 'bold')
-      doc.text(bio.name || user?.username || 'Your Name', margin, y)
-      y += 8
+      const imgData = canvas.toDataURL('image/png')
+      const imgWidth = canvas.width
+      const imgHeight = canvas.height
 
-      doc.setFontSize(12)
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(100)
-      doc.text(bio.title || '', margin, y)
-      y += 6
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: 'a4',
+      })
 
-      const contactParts = [
-        contact.email,
-        contact.phone,
-        contact.github,
-        contact.website,
-      ].filter(Boolean)
-      if (contactParts.length > 0) {
-        doc.setFontSize(10)
-        doc.text(contactParts.join(' | '), margin, y)
-        y += 8
-      }
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      const ratio = pageWidth / imgWidth
+      const heightPerPage = imgHeight * ratio
 
-      doc.setDrawColor(200)
-      doc.line(margin, y, pageWidth - margin, y)
-      y += 8
+      let position = 0
+      let remainingHeight = imgHeight
 
-      if (bio.bio) {
-        doc.setFontSize(14)
-        doc.setFont('helvetica', 'bold')
-        doc.setTextColor(0)
-        doc.text('About', margin, y)
-        y += 6
-        doc.setFontSize(10)
-        doc.setFont('helvetica', 'normal')
-        const bioLines = doc.splitTextToSize(bio.bio, contentWidth)
-        doc.text(bioLines, margin, y)
-        y += bioLines.length * 5 + 6
-      }
+      while (remainingHeight > 0) {
+        const currentHeight = Math.min(remainingHeight, pageHeight / ratio)
+        const sourceCanvas = document.createElement('canvas')
+        sourceCanvas.width = imgWidth
+        sourceCanvas.height = currentHeight
+        const ctx = sourceCanvas.getContext('2d')
+        ctx.drawImage(
+          canvas,
+          0, position, imgWidth, currentHeight,
+          0, 0, imgWidth, currentHeight
+        )
+        const sourceImg = sourceCanvas.toDataURL('image/png')
 
-      if (skills.length > 0) {
-        doc.setFontSize(14)
-        doc.setFont('helvetica', 'bold')
-        doc.setTextColor(0)
-        doc.text('Skills', margin, y)
-        y += 6
-        doc.setFontSize(10)
-        doc.setFont('helvetica', 'normal')
-        const skillsText = skills.join(', ')
-        const skillLines = doc.splitTextToSize(skillsText, contentWidth)
-        doc.text(skillLines, margin, y)
-        y += skillLines.length * 5 + 6
-      }
-
-      if (workExperience.length > 0) {
-        doc.setFontSize(14)
-        doc.setFont('helvetica', 'bold')
-        doc.setTextColor(0)
-        doc.text('Work Experience', margin, y)
-        y += 6
-
-        workExperience.forEach((exp) => {
-          if (y > 270) {
-            doc.addPage()
-            y = 20
-          }
-          doc.setFontSize(11)
-          doc.setFont('helvetica', 'bold')
-          doc.text(exp.position || '', margin, y)
-          y += 5
-          doc.setFontSize(10)
-          doc.setFont('helvetica', 'normal')
-          doc.setTextColor(80)
-          const dateRange = `${exp.startDate || ''} - ${exp.current ? 'Present' : exp.endDate || ''}`
-          doc.text(`${exp.company || ''}  ${dateRange}`, margin, y)
-          y += 5
-          if (exp.description) {
-            doc.setTextColor(0)
-            const descLines = doc.splitTextToSize(exp.description, contentWidth)
-            doc.text(descLines, margin, y)
-            y += descLines.length * 5
-          }
-          doc.setTextColor(0)
-          y += 4
-        })
-      }
-
-      if (projects.length > 0) {
-        if (y > 250) {
-          doc.addPage()
-          y = 20
+        if (position > 0) {
+          pdf.addPage()
         }
-        doc.setFontSize(14)
-        doc.setFont('helvetica', 'bold')
-        doc.setTextColor(0)
-        doc.text('Projects', margin, y)
-        y += 6
-
-        projects.forEach((proj) => {
-          if (y > 270) {
-            doc.addPage()
-            y = 20
-          }
-          doc.setFontSize(11)
-          doc.setFont('helvetica', 'bold')
-          doc.text(proj.title || '', margin, y)
-          y += 5
-          if (proj.description) {
-            doc.setFontSize(10)
-            doc.setFont('helvetica', 'normal')
-            doc.setTextColor(0)
-            const projLines = doc.splitTextToSize(proj.description, contentWidth)
-            doc.text(projLines, margin, y)
-            y += projLines.length * 5
-          }
-          doc.setTextColor(0)
-          y += 4
-        })
+        pdf.addImage(sourceImg, 'PNG', 0, 0, pageWidth, currentHeight * ratio)
+        position += currentHeight
+        remainingHeight -= currentHeight
       }
 
       const username = user?.username || 'resume'
-      doc.save(`${username}-resume.pdf`)
+      pdf.save(`${username}-简历.pdf`)
+    } catch (err) {
+      console.error('PDF generation failed:', err)
     } finally {
       setGenerating(false)
     }
   }
 
+  const contactItems = []
+  if (contact.email) contactItems.push({ label: '邮箱', value: contact.email })
+  if (contact.phone) contactItems.push({ label: '电话', value: contact.phone })
+  if (contact.wechat) contactItems.push({ label: '微信', value: contact.wechat })
+  if (contact.github) contactItems.push({ label: 'GitHub', value: contact.github })
+  if (contact.website) contactItems.push({ label: '网站', value: contact.website })
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-text dark:text-text-dark">PDF 简历</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={generatePDF}
-            disabled={generating}
-            className="px-4 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark transition disabled:opacity-50"
-          >
-            {generating ? '生成中...' : '生成PDF'}
-          </button>
-          <button
-            onClick={generatePDF}
-            disabled={generating}
-            className="px-4 py-1.5 text-sm font-medium text-primary border border-primary rounded-lg hover:bg-primary/5 transition disabled:opacity-50"
-          >
-            下载PDF
-          </button>
+        <div>
+          <h2 className="text-lg font-semibold text-text dark:text-text-dark">PDF 简历</h2>
+          <p className="text-sm text-text-muted dark:text-text-dark-muted mt-1">
+            生成与作品集内容同步的 PDF 版简历，可用于邮件投递
+          </p>
         </div>
+        <button
+          onClick={generatePDF}
+          disabled={generating}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark transition disabled:opacity-60"
+        >
+          {generating ? <Loader2 size={16} className="animate-spin" /> : <FileDown size={16} />}
+          {generating ? '生成中...' : '下载 PDF 简历'}
+        </button>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-border dark:border-border-dark p-6 max-w-2xl">
-        <div className="border-b border-gray-200 dark:border-slate-700 pb-4 mb-4">
-          <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-            {bio.name || user?.username || '姓名'}
-          </h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{bio.title || '职位标题'}</p>
-          <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-500 dark:text-gray-400">
-            {contact.email && <span>{contact.email}</span>}
-            {contact.phone && <span>{contact.phone}</span>}
-            {contact.github && <span>{contact.github}</span>}
-            {contact.website && <span>{contact.website}</span>}
+      <div className="bg-surface-alt dark:bg-surface-dark-alt rounded-xl border border-border dark:border-border-dark p-4 sm:p-6">
+        <p className="text-xs text-text-muted dark:text-text-dark-muted mb-3">简历预览（下载后效果相同）</p>
+        <div className="overflow-auto max-h-[70vh] bg-white rounded-lg shadow-inner border border-gray-200">
+          <div
+            ref={resumeRef}
+            className="bg-white text-gray-900 p-10 w-[210mm] min-h-[297mm] mx-auto"
+            style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif' }}
+          >
+            <header className="pb-5 border-b-2 border-indigo-600 mb-6">
+              <h1 className="text-3xl font-bold text-gray-900">
+                {typeof bio === 'object' ? (bio.name || user?.username || '姓名') : (user?.username || '姓名')}
+              </h1>
+              {typeof bio === 'object' && bio.title && (
+                <p className="text-base text-gray-600 mt-1 font-medium">{bio.title}</p>
+              )}
+              {contactItems.length > 0 && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-sm text-gray-500">
+                  {contactItems.map((item, i) => (
+                    <span key={i}>{item.value}</span>
+                  ))}
+                </div>
+              )}
+              {typeof bio === 'object' && bio.location && (
+                <p className="text-sm text-gray-500 mt-1">{bio.location}</p>
+              )}
+            </header>
+
+            {typeof bio === 'object' && bio.bio && (
+              <section className="mb-6">
+                <h2 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
+                  <span className="w-1 h-5 bg-indigo-600 rounded-full" />
+                  个人简介
+                </h2>
+                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                  {bio.bio}
+                </p>
+              </section>
+            )}
+
+            {skills.length > 0 && (
+              <section className="mb-6">
+                <h2 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="w-1 h-5 bg-indigo-600 rounded-full" />
+                  技能特长
+                </h2>
+                <div className="flex flex-wrap gap-2">
+                  {skills.map((skill, i) => (
+                    <span
+                      key={i}
+                      className="px-3 py-1 text-xs font-medium bg-indigo-50 text-indigo-700 rounded-full"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {workExperience.length > 0 && (
+              <section className="mb-6">
+                <h2 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="w-1 h-5 bg-indigo-600 rounded-full" />
+                  工作经历
+                </h2>
+                <div className="space-y-4">
+                  {workExperience.map((exp) => (
+                    <div key={exp.id}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-base font-semibold text-gray-900">{exp.position || '职位'}</h3>
+                          <p className="text-sm text-gray-600 font-medium">{exp.company || '公司'}</p>
+                        </div>
+                        <span className="text-xs text-gray-500 whitespace-nowrap shrink-0 mt-0.5">
+                          {exp.startDate || ''} — {exp.current ? '至今' : (exp.endDate || '')}
+                        </span>
+                      </div>
+                      {exp.description && (
+                        <p className="text-sm text-gray-700 mt-2 leading-relaxed whitespace-pre-line">
+                          {exp.description}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {projects.length > 0 && (
+              <section className="mb-6">
+                <h2 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="w-1 h-5 bg-indigo-600 rounded-full" />
+                  项目经历
+                </h2>
+                <div className="space-y-4">
+                  {projects.map((proj) => (
+                    <div key={proj.id}>
+                      <div className="flex items-start justify-between gap-4">
+                        <h3 className="text-base font-semibold text-gray-900">{proj.title || '项目'}</h3>
+                        {proj.link && (
+                          <span className="text-xs text-indigo-600 whitespace-nowrap shrink-0 mt-0.5">
+                            {proj.link}
+                          </span>
+                        )}
+                      </div>
+                      {proj.tags && proj.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {proj.tags.map((tag, i) => (
+                            <span key={i} className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {proj.description && (
+                        <p className="text-sm text-gray-700 mt-2 leading-relaxed whitespace-pre-line">
+                          {proj.description}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <footer className="pt-4 mt-auto border-t border-gray-200 text-center text-xs text-gray-400">
+              由 FolioCraft 生成
+            </footer>
           </div>
         </div>
-
-        {bio.bio && (
-          <div className="mb-4">
-            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">简介</h4>
-            <p className="text-sm text-gray-600 dark:text-gray-300">{bio.bio}</p>
-          </div>
-        )}
-
-        {skills.length > 0 && (
-          <div className="mb-4">
-            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">技能</h4>
-            <div className="flex flex-wrap gap-1.5">
-              {skills.map((skill) => (
-                <span
-                  key={skill}
-                  className="px-2 py-0.5 text-xs bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 rounded"
-                >
-                  {skill}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {workExperience.length > 0 && (
-          <div className="mb-4">
-            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">工作经历</h4>
-            {workExperience.map((exp) => (
-              <div key={exp.id} className="mb-3 last:mb-0">
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{exp.position}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {exp.company} · {exp.startDate} - {exp.current ? '至今' : exp.endDate}
-                </p>
-                {exp.description && (
-                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">{exp.description}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {projects.length > 0 && (
-          <div>
-            <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">项目经历</h4>
-            {projects.map((proj) => (
-              <div key={proj.id} className="mb-3 last:mb-0">
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{proj.title}</p>
-                {proj.description && (
-                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">{proj.description}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   )

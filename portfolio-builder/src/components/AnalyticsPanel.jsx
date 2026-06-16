@@ -28,9 +28,6 @@ export default function AnalyticsPanel() {
   const user = useAuthStore((s) => s.user)
 
   useEffect(() => {
-    for (let i = 0; i < 20; i++) {
-      recordVisit()
-    }
   }, [])
 
   const { pv, uv, regions } = portfolio.analytics

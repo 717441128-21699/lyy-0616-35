@@ -135,6 +135,8 @@ export default function DashboardPage() {
         return <BlogEditor />
       case 'contact':
         return <ContactEditor />
+      case 'modules':
+        return <ModuleToggle />
       case 'theme':
         return <ThemeSelector />
       case 'publish':

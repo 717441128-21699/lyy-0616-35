@@ -9,6 +9,7 @@ export default function PublishPanel() {
   const user = useAuthStore((s) => s.user)
   const portfolio = usePortfolioStore((s) => s.portfolio)
   const publish = usePortfolioStore((s) => s.publish)
+  const unpublish = usePortfolioStore((s) => s.unpublish)
   const updateDomain = usePortfolioStore((s) => s.updateDomain)
 
   const [customDomain, setCustomDomain] = useState(portfolio.domain.customDomain || '')
@@ -25,10 +26,7 @@ export default function PublishPanel() {
   }
 
   const handleUnpublish = () => {
-    updateDomain({ subdomain: '' })
-    usePortfolioStore.setState((state) => ({
-      portfolio: { ...state.portfolio, isPublished: false },
-    }))
+    unpublish(username)
   }
 
   const handleCopy = () => {

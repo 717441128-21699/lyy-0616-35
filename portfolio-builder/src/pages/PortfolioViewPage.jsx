@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   Mail, Phone, Code2, Briefcase, AtSign, Globe,
-  MapPin, Calendar, ExternalLink, ArrowUp, Sun, Moon, MessageCircle
+  MapPin, Calendar, ExternalLink, ArrowUp, Sun, Moon, MessageCircle, Eye
 } from 'lucide-react'
 import usePortfolioStore from '../store/usePortfolioStore'
 
@@ -31,11 +31,56 @@ function formatDateRange(item) {
   return start && end ? `${start} — ${end}` : start || end
 }
 
+function UnpublishedPage({ username }) {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950 flex items-center justify-center p-6">
+      <div className="max-w-md w-full text-center animate-fade-in">
+        <div className="mb-8">
+          <div className="w-20 h-20 mx-auto bg-slate-200 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6">
+            <Eye size={40} className="text-slate-400 dark:text-slate-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">
+            作品集暂未发布
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 mb-2">
+            <span className="font-mono text-sm bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
+              {username}
+            </span>
+          </p>
+          <p className="text-slate-500 dark:text-slate-400 mt-4">
+            该用户的作品集尚未发布或不存在。
+          </p>
+        </div>
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
+        >
+          返回首页
+        </Link>
+      </div>
+    </div>
+  )
+}
+
 export default function PortfolioViewPage() {
   const { username } = useParams()
-  const { portfolio, recordVisit } = usePortfolioStore()
+  const getPortfolioByUsername = usePortfolioStore((s) => s.getPortfolioByUsername)
+  const recordVisit = usePortfolioStore((s) => s.recordVisit)
   const [showTop, setShowTop] = useState(false)
-  const [localDark, setLocalDark] = useState(false)
+  const [isDark, setIsDark] = useState(false)
+  const [visitRecorded, setVisitRecorded] = useState(false)
+
+  const portfolioData = getPortfolioByUsername(username)
+  const portfolio = portfolioData || {}
+  const exists = !!portfolioData
+  const isPublished = portfolio.isPublished
+
+  useEffect(() => {
+    if (exists && isPublished && !visitRecorded) {
+      recordVisit(username)
+      setVisitRecorded(true)
+    }
+  }, [exists, isPublished, visitRecorded, username, recordVisit])
 
   const bio = portfolio.bio || {}
   const projects = portfolio.projects || []
@@ -49,13 +94,8 @@ export default function PortfolioViewPage() {
 
   const templateId = theme.templateId || 'modern'
   const colorScheme = theme.colorScheme || 'indigo'
-  const isDark = theme.darkMode || localDark
   const layout = theme.layout || 'centered'
   const c = COLOR_MAP[colorScheme] || COLOR_MAP.indigo
-
-  useEffect(() => {
-    recordVisit()
-  }, [])
 
   useEffect(() => {
     document.title = seo.title || `${bio.name || username} - 个人作品集`
@@ -71,13 +111,16 @@ export default function PortfolioViewPage() {
   }, [seo.title, seo.description, bio.name, username])
 
   useEffect(() => {
-    if (theme.darkMode) {
+    setIsDark(theme.darkMode || false)
+  }, [theme.darkMode])
+
+  useEffect(() => {
+    if (isDark) {
       document.documentElement.classList.add('dark')
     } else {
       document.documentElement.classList.remove('dark')
     }
-    return () => document.documentElement.classList.remove('dark')
-  }, [theme.darkMode])
+  }, [isDark])
 
   useEffect(() => {
     const onScroll = () => setShowTop(window.scrollY > 400)
@@ -86,12 +129,7 @@ export default function PortfolioViewPage() {
   }, [])
 
   const toggleDark = () => {
-    setLocalDark((d) => {
-      const next = !d
-      if (next) document.documentElement.classList.add('dark')
-      else document.documentElement.classList.remove('dark')
-      return next
-    })
+    setIsDark((d) => !d)
   }
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -103,6 +141,10 @@ export default function PortfolioViewPage() {
   const cardBg = isDark ? 'bg-gray-900' : 'bg-white'
   const cardBorder = isDark ? 'border-gray-800' : 'border-gray-200'
   const surfaceBg = isDark ? 'bg-gray-900/50' : 'bg-gray-50'
+
+  if (!exists || !isPublished) {
+    return <UnpublishedPage username={username} />
+  }
 
   const heroSection = () => {
     if (!modules.bio && !bio.name) return null

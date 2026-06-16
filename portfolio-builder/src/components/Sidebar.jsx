@@ -28,6 +28,7 @@ const NAV_ITEMS = [
   { key: 'work', label: '💼 工作经历', icon: Clock },
   { key: 'blog', label: '📝 博客文章', icon: BookOpen },
   { key: 'contact', label: '📧 联系方式', icon: Mail },
+  { key: 'modules', label: '🔘 模块开关', icon: ToggleLeft },
   { key: 'theme', label: '🎨 主题设置', icon: Palette },
   { key: 'publish', label: '🌐 发布管理', icon: Globe },
   { key: 'analytics', label: '📊 访客统计', icon: BarChart3 },
