@@ -84,7 +84,25 @@ export default function PortfolioViewPage() {
         visitorId = crypto.randomUUID()
         localStorage.setItem('folio_visitor_id', visitorId)
       }
-      recordVisit(username, visitorId)
+
+      let source = '直接访问'
+      try {
+        const params = new URLSearchParams(window.location.search)
+        if (params.get('src') === 'copy') {
+          source = '复制链接访问'
+        } else if (document.referrer && document.referrer.includes(window.location.host)) {
+          source = '站内链接访问'
+        } else if (params.get('src')) {
+          source = params.get('src') + '访问'
+        } else if (window.performance && performance.getEntriesByType && performance.getEntriesByType('navigation').length > 0) {
+          const navEntry = performance.getEntriesByType('navigation')[0]
+          if (navEntry.type === 'navigate' && !document.referrer) {
+            source = '直接访问'
+          }
+        }
+      } catch (e) { /* noop */ }
+
+      recordVisit(username, visitorId, source)
       setVisitRecorded(true)
     }
   }, [exists, isPublished, visitRecorded, username, recordVisit])

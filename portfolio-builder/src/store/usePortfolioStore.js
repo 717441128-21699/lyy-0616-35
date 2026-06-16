@@ -37,6 +37,7 @@ function createEmptyPortfolio() {
       pv: 0,
       uv: 0,
       regions: [],
+      sources: [],
       recentVisits: [],
       trend: [],
       visitorIds: [],
@@ -75,11 +76,25 @@ const usePortfolioStore = create(
       initForUser: (username) => {
         const { portfolios } = get()
         const existing = portfolios[username]
-        const portfolio = existing || createEmptyPortfolio()
+        let portfolio = existing || createEmptyPortfolio()
+
+        if (existing && existing.isPublished && !existing.publishedSnapshot) {
+          portfolio = {
+            ...portfolio,
+            isPublished: false,
+            domain: {
+              ...portfolio.domain,
+              subdomain: '',
+            },
+            publishedSnapshot: null,
+            needsRepublish: true,
+          }
+        }
+
         set({
           currentUsername: username,
           portfolio,
-          portfolios: existing ? portfolios : { ...portfolios, [username]: portfolio },
+          portfolios: existing ? { ...portfolios, [username]: portfolio } : { ...portfolios, [username]: portfolio },
         })
       },
 
@@ -348,7 +363,7 @@ const usePortfolioStore = create(
           }
         }),
 
-      publish: (username) =>
+      publish: (username, note) =>
         set((state) => {
           const currentPortfolio = state.portfolios[username] || state.portfolio
           const newVersion = (currentPortfolio.publishVersion || 0) + 1
@@ -369,6 +384,7 @@ const usePortfolioStore = create(
             version: newVersion,
             publishedAt: now,
             summary,
+            note: note || '',
             snapshot: JSON.parse(JSON.stringify(snapshot)),
           }
           const existingHistory = currentPortfolio.publishHistory || []
@@ -378,7 +394,8 @@ const usePortfolioStore = create(
             publishVersion: newVersion,
             lastPublishedAt: now,
             publishedSnapshot: snapshot,
-            publishHistory: [historyEntry, ...existingHistory].slice(0, 20),
+            publishHistory: [historyEntry, ...existingHistory].slice(0, 50),
+            needsRepublish: false,
             domain: {
               ...currentPortfolio.domain,
               subdomain: `${username}.site`,
@@ -437,7 +454,7 @@ const usePortfolioStore = create(
         })
       },
 
-      recordVisit: (username, visitorId) => {
+      recordVisit: (username, visitorId, source) => {
         const { portfolios } = get()
         const targetPortfolio = portfolios[username]
         if (!targetPortfolio) return
@@ -446,6 +463,7 @@ const usePortfolioStore = create(
         const isUnique = !existingVisitorIds.includes(visitorId)
         const now = new Date()
         const dayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+        const visitSource = source || '未知来源'
 
         const updatedVisitorIds = isUnique
           ? [...existingVisitorIds, visitorId].slice(-500)
@@ -453,14 +471,26 @@ const usePortfolioStore = create(
 
         const updatedRegions = [...(targetPortfolio.analytics.regions || [])]
 
+        const existingSources = targetPortfolio.analytics.sources || []
+        const sourceFound = existingSources.find((s) => s.name === visitSource)
+        let updatedSources
+        if (sourceFound) {
+          updatedSources = existingSources.map((s) =>
+            s.name === visitSource ? { ...s, count: s.count + 1 } : s
+          )
+        } else {
+          updatedSources = [...existingSources, { name: visitSource, count: 1 }]
+        }
+
         const recentVisit = {
           id: crypto.randomUUID(),
           region: '未知来源',
+          source: visitSource,
           timestamp: now.toISOString(),
           isUnique,
         }
         const existingRecent = targetPortfolio.analytics.recentVisits || []
-        const updatedRecent = [recentVisit, ...existingRecent].slice(0, 50)
+        const updatedRecent = [recentVisit, ...existingRecent].slice(0, 100)
 
         const existingTrend = targetPortfolio.analytics.trend || []
         const dayIndex = existingTrend.findIndex((d) => d.date === dayKey)
@@ -470,7 +500,7 @@ const usePortfolioStore = create(
             i === dayIndex ? { ...d, pv: d.pv + 1, uv: d.uv + (isUnique ? 1 : 0) } : d
           )
         } else {
-          updatedTrend = [...existingTrend, { date: dayKey, pv: 1, uv: isUnique ? 1 : 0 }].slice(-7)
+          updatedTrend = [...existingTrend, { date: dayKey, pv: 1, uv: isUnique ? 1 : 0 }].slice(-30)
         }
 
         const updatedPortfolio = {
@@ -479,6 +509,7 @@ const usePortfolioStore = create(
             pv: targetPortfolio.analytics.pv + 1,
             uv: targetPortfolio.analytics.uv + (isUnique ? 1 : 0),
             regions: updatedRegions,
+            sources: updatedSources,
             recentVisits: updatedRecent,
             trend: updatedTrend,
             visitorIds: updatedVisitorIds,

@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../store/useAuthStore'
 import usePortfolioStore from '../store/usePortfolioStore'
 import {
   Globe, Copy, Check, ExternalLink, Unplug, ShieldCheck, XCircle,
   Eye, AlertTriangle, Calendar, Tag, ChevronRight, Sparkles,
-  History, RotateCcw, ChevronDown, ChevronUp, Clock, FileText
+  History, RotateCcw, ChevronDown, ChevronUp, Clock, FileText,
+  AlertCircle, StickyNote
 } from 'lucide-react'
 
 function checkMissingContent(portfolio, modules) {
@@ -66,6 +67,19 @@ function formatDate(dateStr) {
   return `${year}-${month}-${day} ${hour}:${min}`
 }
 
+function formatDateOnly(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function formatMonth(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
+  return `${d.getFullYear()}年 ${monthNames[d.getMonth()]}`
+}
+
 export default function PublishPanel() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
@@ -83,19 +97,23 @@ export default function PublishPanel() {
   const [showPublishConfirm, setShowPublishConfirm] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [publishSuccess, setPublishSuccess] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
+  const [historyOpenMonths, setHistoryOpenMonths] = useState({})
+  const [historyOpenDays, setHistoryOpenDays] = useState({})
   const [restoreConfirmVersion, setRestoreConfirmVersion] = useState(null)
+  const [publishNote, setPublishNote] = useState('')
 
   const username = user?.username || ''
   const subdomain = `${username}.site`
   const publicUrl = `https://${subdomain}`
   const localPublicUrl = `/p/${username}`
+  const localPublicUrlWithCopy = `/p/${username}?src=copy`
   const previewUrl = `/preview/${username}`
   const isPublished = portfolio.isPublished
   const publishVersion = portfolio.publishVersion || 0
   const lastPublishedAt = portfolio.lastPublishedAt
   const modules = portfolio.modules || {}
   const publishHistory = portfolio.publishHistory || []
+  const needsRepublish = portfolio.needsRepublish
   const hasDraftChanges = isPublished && portfolio.publishedSnapshot && (
     JSON.stringify(portfolio.bio) !== JSON.stringify(portfolio.publishedSnapshot.bio) ||
     JSON.stringify(portfolio.projects) !== JSON.stringify(portfolio.publishedSnapshot.projects) ||
@@ -112,12 +130,25 @@ export default function PublishPanel() {
   const criticalMissing = missingItems.filter((m) => m.type === 'warning')
   const hasCriticalIssues = criticalMissing.length > 0
 
+  const groupedHistory = useMemo(() => {
+    const byMonth = {}
+    publishHistory.forEach((entry) => {
+      const monthKey = formatMonth(entry.publishedAt)
+      const dayKey = formatDateOnly(entry.publishedAt)
+      if (!byMonth[monthKey]) byMonth[monthKey] = {}
+      if (!byMonth[monthKey][dayKey]) byMonth[monthKey][dayKey] = []
+      byMonth[monthKey][dayKey].push(entry)
+    })
+    return byMonth
+  }, [publishHistory])
+
   const handlePublish = async () => {
     setPublishing(true)
     try {
       await new Promise((resolve) => setTimeout(resolve, 800))
-      publish(username)
+      publish(username, publishNote.trim() || undefined)
       setPublishSuccess(true)
+      setPublishNote('')
       setTimeout(() => setPublishSuccess(false), 3000)
     } finally {
       setPublishing(false)
@@ -136,7 +167,7 @@ export default function PublishPanel() {
   }
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(publicUrl)
+    navigator.clipboard.writeText(window.location.origin + localPublicUrlWithCopy)
     setCopiedLink(true)
     setTimeout(() => setCopiedLink(false), 2000)
   }
@@ -170,6 +201,14 @@ export default function PublishPanel() {
     }, 1500)
   }
 
+  const toggleMonth = (monthKey) => {
+    setHistoryOpenMonths((prev) => ({ ...prev, [monthKey]: !prev[monthKey] }))
+  }
+
+  const toggleDay = (dayKey) => {
+    setHistoryOpenDays((prev) => ({ ...prev, [dayKey]: !prev[dayKey] }))
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -197,7 +236,19 @@ export default function PublishPanel() {
         </div>
       </div>
 
-      {hasDraftChanges && (
+      {needsRepublish && (
+        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 flex items-start gap-3">
+          <AlertCircle size={18} className="text-red-500 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-red-800 dark:text-red-300">旧数据检测：需要重新发布</p>
+            <p className="text-xs text-red-700 dark:text-red-400 mt-1">
+              你之前发布过作品集，但缺少线上快照。为了安全起见，当前公开链接已自动转为未发布状态。请确认草稿内容后点击"立即发布"恢复公开页面展示。
+            </p>
+          </div>
+        </div>
+      )}
+
+      {hasDraftChanges && !needsRepublish && (
         <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 flex items-start gap-3">
           <AlertTriangle size={18} className="text-amber-500 mt-0.5 shrink-0" />
           <div>
@@ -236,7 +287,7 @@ export default function PublishPanel() {
                     {formatDate(lastPublishedAt)}
                   </span>
                 )}
-                {hasDraftChanges && (
+                {hasDraftChanges && !needsRepublish && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                     <FileText size={12} />
                     有未发布更改
@@ -256,28 +307,10 @@ export default function PublishPanel() {
         {isPublished ? (
           <div className="space-y-4 pt-2">
             <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4">
-              <p className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">你的作品集已上线</p>
-              <div className="space-y-2">
+              <p className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-3">你的作品集已上线</p>
+              <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-blue-600 dark:text-blue-400 shrink-0">公开链接</span>
-                  <a
-                    href={publicUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 text-sm font-mono text-blue-600 dark:text-blue-400 hover:underline truncate"
-                  >
-                    {publicUrl}
-                  </a>
-                  <button
-                    onClick={handleCopyLink}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
-                  >
-                    {copiedLink ? <Check size={14} /> : <Copy size={14} />}
-                    {copiedLink ? '已复制' : '复制链接'}
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-blue-600 dark:text-blue-400 shrink-0">本地访问</span>
+                  <span className="text-xs text-blue-600 dark:text-blue-400 shrink-0 w-16">公开链接</span>
                   <a
                     href={localPublicUrl}
                     target="_blank"
@@ -285,6 +318,24 @@ export default function PublishPanel() {
                     className="flex-1 text-sm font-mono text-blue-600 dark:text-blue-400 hover:underline truncate"
                   >
                     {window.location.origin}{localPublicUrl}
+                  </a>
+                  <button
+                    onClick={handleCopyLink}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                  >
+                    {copiedLink ? <Check size={14} /> : <Copy size={14} />}
+                    {copiedLink ? '已复制' : '复制'}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-blue-600 dark:text-blue-400 shrink-0 w-16">子域名</span>
+                  <a
+                    href={publicUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 text-sm font-mono text-blue-600 dark:text-blue-400 hover:underline truncate"
+                  >
+                    {publicUrl}
                   </a>
                 </div>
               </div>
@@ -296,6 +347,13 @@ export default function PublishPanel() {
               >
                 <Eye size={16} />
                 打开实时预览
+              </button>
+              <button
+                onClick={() => setShowPublishConfirm(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white bg-primary/90 hover:bg-primary transition-colors"
+              >
+                <Sparkles size={16} />
+                重新发布
               </button>
               <button
                 onClick={handleUnpublish}
@@ -355,7 +413,7 @@ export default function PublishPanel() {
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white bg-primary hover:bg-primary/90 transition-colors"
               >
                 <Sparkles size={16} />
-                {hasCriticalIssues ? '仍要发布' : '立即发布'}
+                {needsRepublish ? '重新发布恢复' : (hasCriticalIssues ? '仍要发布' : '立即发布')}
               </button>
             </div>
           </div>
@@ -364,68 +422,116 @@ export default function PublishPanel() {
 
       {publishHistory.length > 0 && (
         <section className="bg-surface dark:bg-surface-dark-alt rounded-xl border border-border dark:border-border-dark p-5 space-y-4">
-          <button
-            onClick={() => setShowHistory(!showHistory)}
-            className="w-full flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <History size={18} className="text-primary" />
-              <h3 className="text-lg font-semibold text-text dark:text-text-dark">版本历史</h3>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-text-muted dark:text-text-dark-muted">
-                {publishHistory.length} 个版本
-              </span>
-            </div>
-            {showHistory ? <ChevronUp size={18} className="text-text-muted dark:text-text-dark-muted" /> : <ChevronDown size={18} className="text-text-muted dark:text-text-dark-muted" />}
-          </button>
+          <div className="flex items-center gap-2">
+            <History size={18} className="text-primary" />
+            <h3 className="text-lg font-semibold text-text dark:text-text-dark">版本历史</h3>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-text-muted dark:text-text-dark-muted">
+              共 {publishHistory.length} 个版本
+            </span>
+          </div>
 
-          {showHistory && (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {publishHistory.map((entry) => (
-                <div
-                  key={entry.version}
-                  className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
-                    entry.version === publishVersion
-                      ? 'border-primary/30 bg-primary/5 dark:bg-primary/10'
-                      : 'border-border dark:border-border-dark hover:bg-surface-alt dark:hover:bg-surface-dark'
-                  }`}
-                >
-                  <div className="shrink-0 mt-0.5">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                      entry.version === publishVersion
-                        ? 'bg-primary text-white'
-                        : 'bg-slate-100 dark:bg-slate-800 text-text-muted dark:text-text-dark-muted'
-                    }`}>
-                      {entry.version}
+          <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+            {Object.entries(groupedHistory).map(([monthKey, days]) => {
+              const isMonthOpen = historyOpenMonths[monthKey] !== false
+              const totalVersionsMonth = Object.values(days).reduce((acc, arr) => acc + arr.length, 0)
+              return (
+                <div key={monthKey} className="border border-border dark:border-border-dark rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => toggleMonth(monthKey)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-surface-alt dark:bg-surface-dark hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Calendar size={16} className="text-primary" />
+                      <span className="text-sm font-semibold text-text dark:text-text-dark">{monthKey}</span>
+                      <span className="text-xs text-text-muted dark:text-text-dark-muted">
+                        {totalVersionsMonth} 个版本
+                      </span>
                     </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold text-text dark:text-text-dark">v{entry.version}</span>
-                      {entry.version === publishVersion && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">当前版本</span>
-                      )}
+                    {isMonthOpen ? <ChevronUp size={16} className="text-text-muted dark:text-text-dark-muted" /> : <ChevronDown size={16} className="text-text-muted dark:text-text-dark-muted" />}
+                  </button>
+
+                  {isMonthOpen && (
+                    <div className="p-3 space-y-2">
+                      {Object.entries(days).map(([dayKey, entries]) => {
+                        const isDayOpen = historyOpenDays[dayKey] !== false
+                        return (
+                          <div key={dayKey} className="rounded-lg border border-border dark:border-border-dark overflow-hidden">
+                            <button
+                              onClick={() => toggleDay(dayKey)}
+                              className="w-full flex items-center justify-between px-3 py-2 bg-surface dark:bg-surface-dark-alt hover:bg-surface-alt dark:hover:bg-surface-dark transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Clock size={14} className="text-text-muted dark:text-text-dark-muted" />
+                                <span className="text-sm font-medium text-text dark:text-text-dark">{dayKey}</span>
+                                <span className="text-xs text-text-muted dark:text-text-dark-muted">
+                                  {entries.length} 次发布
+                                </span>
+                              </div>
+                              {isDayOpen ? <ChevronUp size={14} className="text-text-muted dark:text-text-dark-muted" /> : <ChevronDown size={14} className="text-text-muted dark:text-text-dark-muted" />}
+                            </button>
+
+                            {isDayOpen && (
+                              <div className="p-2 space-y-2">
+                                {entries.map((entry) => (
+                                  <div
+                                    key={entry.version}
+                                    className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                                      entry.version === publishVersion
+                                        ? 'border-primary/30 bg-primary/5 dark:bg-primary/10'
+                                        : 'border-border dark:border-border-dark bg-surface dark:bg-surface-dark-alt hover:bg-surface-alt dark:hover:bg-surface-dark'
+                                    }`}
+                                  >
+                                    <div className="shrink-0 mt-0.5">
+                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                                        entry.version === publishVersion
+                                          ? 'bg-primary text-white'
+                                          : 'bg-slate-100 dark:bg-slate-800 text-text-muted dark:text-text-dark-muted'
+                                      }`}>
+                                        {entry.version}
+                                      </div>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-sm font-semibold text-text dark:text-text-dark">v{entry.version}</span>
+                                        {entry.version === publishVersion && (
+                                          <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">当前版本</span>
+                                        )}
+                                        <span className="text-xs text-text-muted dark:text-text-dark-muted">
+                                          {formatDate(entry.publishedAt)}
+                                        </span>
+                                      </div>
+                                      <p className="mt-1.5 text-sm text-text-secondary dark:text-text-dark-secondary">
+                                        {entry.summary}
+                                      </p>
+                                      {entry.note && (
+                                        <div className="mt-2 p-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 flex items-start gap-2">
+                                          <StickyNote size={13} className="text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                                          <p className="text-xs text-amber-800 dark:text-amber-300 whitespace-pre-wrap">{entry.note}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                    {entry.version !== publishVersion && (
+                                      <button
+                                        onClick={() => setRestoreConfirmVersion(entry.version)}
+                                        className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 dark:text-amber-400 dark:bg-amber-900/20 dark:hover:bg-amber-900/30 transition-colors"
+                                      >
+                                        <RotateCcw size={12} />
+                                        恢复
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
-                    <div className="flex items-center gap-1.5 mt-1 text-xs text-text-muted dark:text-text-dark-muted">
-                      <Clock size={12} />
-                      {formatDate(entry.publishedAt)}
-                    </div>
-                    <p className="mt-1.5 text-sm text-text-secondary dark:text-text-dark-secondary truncate">
-                      {entry.summary}
-                    </p>
-                  </div>
-                  {entry.version !== publishVersion && (
-                    <button
-                      onClick={() => setRestoreConfirmVersion(entry.version)}
-                      className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 dark:text-amber-400 dark:bg-amber-900/20 dark:hover:bg-amber-900/30 transition-colors"
-                    >
-                      <RotateCcw size={12} />
-                      恢复
-                    </button>
                   )}
                 </div>
-              ))}
-            </div>
-          )}
+              )
+            })}
+          </div>
         </section>
       )}
 
@@ -466,9 +572,23 @@ export default function PublishPanel() {
                 发布后，公开链接将展示当前草稿的快照，访客看到的是此版本的内容
               </p>
             </div>
-            <div className="p-5">
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-text dark:text-text-dark mb-1.5 flex items-center gap-1.5">
+                  <StickyNote size={14} className="text-primary" />
+                  发布备注（选填）
+                </label>
+                <textarea
+                  value={publishNote}
+                  onChange={(e) => setPublishNote(e.target.value)}
+                  rows={3}
+                  placeholder="例如：新增了 2 个项目案例、更新了联系方式、调整了博客文章顺序..."
+                  className="w-full px-3 py-2 rounded-lg border border-border dark:border-border-dark bg-surface-alt dark:bg-surface-dark text-text dark:text-text-dark text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-text-muted/50 dark:placeholder:text-text-dark-muted/50 resize-none"
+                />
+              </div>
+
               {hasCriticalIssues && (
-                <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                   <p className="text-sm font-medium text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
                     <AlertTriangle size={14} />
                     仍有 {criticalMissing.length} 项内容待完善
@@ -482,6 +602,7 @@ export default function PublishPanel() {
                   </div>
                 </div>
               )}
+
               <div className="space-y-2 text-sm text-text dark:text-text-dark">
                 <p>发布内容包括：</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -496,9 +617,10 @@ export default function PublishPanel() {
                   })}
                 </div>
               </div>
-              <div className="mt-5 flex gap-2 justify-end">
+
+              <div className="mt-1 flex gap-2 justify-end pt-2">
                 <button
-                  onClick={() => setShowPublishConfirm(false)}
+                  onClick={() => { setShowPublishConfirm(false); setPublishNote('') }}
                   className="px-4 py-2 rounded-lg text-sm font-medium text-text-muted dark:text-text-dark-muted hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                 >
                   取消

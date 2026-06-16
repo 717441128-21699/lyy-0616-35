@@ -11,6 +11,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  CartesianGrid,
 } from 'recharts'
 import {
   BarChart3,
@@ -20,11 +21,17 @@ import {
   Clock,
   Activity,
   Zap,
-  Inbox
+  Inbox,
+  ArrowRightCircle,
+  Globe2
 } from 'lucide-react'
 
 const PIE_COLORS = [
   '#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6',
+]
+
+const SOURCE_COLORS = [
+  '#6366f1', '#06b6d4', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6',
 ]
 
 function formatTime(timestamp) {
@@ -57,11 +64,19 @@ function formatDateForDisplay(dateStr) {
   return dateStr
 }
 
+function getSourceIcon(sourceName) {
+  if (!sourceName) return <Globe2 size={14} />
+  if (sourceName.includes('复制')) return <ArrowRightCircle size={14} />
+  if (sourceName.includes('站内')) return <Activity size={14} />
+  if (sourceName.includes('直接')) return <Eye size={14} />
+  return <Globe2 size={14} />
+}
+
 export default function AnalyticsPanel() {
   const portfolio = usePortfolioStore((s) => s.portfolio)
   const user = useAuthStore((s) => s.user)
 
-  const { pv = 0, uv = 0, regions = [], recentVisits = [], trend = [] } = portfolio.analytics || {}
+  const { pv = 0, uv = 0, regions = [], recentVisits = [], trend = [], sources = [] } = portfolio.analytics || {}
 
   const avgRatio = uv > 0 ? (pv / uv).toFixed(2) : '—'
 
@@ -71,6 +86,11 @@ export default function AnalyticsPanel() {
     if (!regions || regions.length === 0) return []
     return [...regions].sort((a, b) => b.count - a.count)
   }, [regions])
+
+  const displaySources = useMemo(() => {
+    if (!sources || sources.length === 0) return []
+    return [...sources].sort((a, b) => b.count - a.count)
+  }, [sources])
 
   const displayTrend = useMemo(() => {
     if (!trend || trend.length === 0) return []
@@ -86,6 +106,7 @@ export default function AnalyticsPanel() {
   }, [recentVisits])
 
   const hasRegionData = displayRegions.length > 0
+  const hasSourceData = displaySources.length > 0
   const hasTrendData = displayTrend.length > 0
 
   return (
@@ -133,7 +154,7 @@ export default function AnalyticsPanel() {
             </div>
           </div>
           <p className="mt-2 text-xs text-text-muted dark:text-text-dark-muted">
-            去重后的独立访客数量
+            同一浏览器不重复计数
           </p>
         </div>
         <div className="bg-surface dark:bg-surface-dark-alt border border-border dark:border-border-dark rounded-xl p-5">
@@ -176,27 +197,69 @@ export default function AnalyticsPanel() {
         </div>
       ) : (
         <>
+          <div className="bg-surface dark:bg-surface-dark-alt border border-border dark:border-border-dark rounded-xl p-5">
+            <h3 className="text-base font-semibold text-text dark:text-text-dark mb-4 flex items-center gap-2">
+              <BarChart3 size={16} className="text-primary" />
+              访客趋势（最近 {displayTrend.length} 天）
+            </h3>
+            {hasTrendData ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={displayTrend} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fill: 'var(--color-text-muted)', fontSize: 12 }}
+                    axisLine={{ stroke: 'var(--color-border)' }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fill: 'var(--color-text-muted)', fontSize: 12 }}
+                    axisLine={{ stroke: 'var(--color-border)' }}
+                    tickLine={false}
+                    allowDecimals={false}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'var(--color-surface)',
+                      borderColor: 'var(--color-border)',
+                      borderRadius: 8,
+                      fontSize: 13,
+                    }}
+                  />
+                  <Bar dataKey="pv" name="PV" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="uv" name="UV" fill="var(--color-secondary)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[260px] flex flex-col items-center justify-center text-text-muted dark:text-text-dark-muted">
+                <Clock size={28} className="mb-2 opacity-50" />
+                <p className="text-sm">暂无趋势数据</p>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-surface dark:bg-surface-dark-alt border border-border dark:border-border-dark rounded-xl p-5">
               <h3 className="text-base font-semibold text-text dark:text-text-dark mb-4 flex items-center gap-2">
-                <BarChart3 size={16} className="text-primary" />
-                访客趋势（最近 7 天）
+                <ArrowRightCircle size={16} className="text-primary" />
+                访问来源分布
               </h3>
-              {hasTrendData ? (
-                <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={displayTrend} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                    <XAxis
-                      dataKey="label"
-                      tick={{ fill: 'var(--color-text-muted)', fontSize: 12 }}
-                      axisLine={{ stroke: 'var(--color-border)' }}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fill: 'var(--color-text-muted)', fontSize: 12 }}
-                      axisLine={{ stroke: 'var(--color-border)' }}
-                      tickLine={false}
-                      allowDecimals={false}
-                    />
+              {hasSourceData ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie
+                      data={displaySources}
+                      dataKey="count"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={90}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {displaySources.map((_, index) => (
+                        <Cell key={index} fill={SOURCE_COLORS[index % SOURCE_COLORS.length]} />
+                      ))}
+                    </Pie>
                     <Tooltip
                       contentStyle={{
                         backgroundColor: 'var(--color-surface)',
@@ -205,14 +268,12 @@ export default function AnalyticsPanel() {
                         fontSize: 13,
                       }}
                     />
-                    <Bar dataKey="pv" name="PV" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="uv" name="UV" fill="var(--color-secondary)" radius={[4, 4, 0, 0]} />
-                  </BarChart>
+                  </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-[260px] flex flex-col items-center justify-center text-text-muted dark:text-text-dark-muted">
-                  <Clock size={28} className="mb-2 opacity-50" />
-                  <p className="text-sm">暂无趋势数据</p>
+                <div className="h-[280px] flex flex-col items-center justify-center text-text-muted dark:text-text-dark-muted">
+                  <ArrowRightCircle size={28} className="mb-2 opacity-50" />
+                  <p className="text-sm">暂无来源数据</p>
                 </div>
               )}
             </div>
@@ -220,10 +281,10 @@ export default function AnalyticsPanel() {
             <div className="bg-surface dark:bg-surface-dark-alt border border-border dark:border-border-dark rounded-xl p-5">
               <h3 className="text-base font-semibold text-text dark:text-text-dark mb-4 flex items-center gap-2">
                 <MapPin size={16} className="text-primary" />
-                地域占比
+                地域分布
               </h3>
               {hasRegionData ? (
-                <ResponsiveContainer width="100%" height={260}>
+                <ResponsiveContainer width="100%" height={280}>
                   <PieChart>
                     <Pie
                       data={displayRegions}
@@ -249,103 +310,101 @@ export default function AnalyticsPanel() {
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-[260px] flex flex-col items-center justify-center text-text-muted dark:text-text-dark-muted">
-                  <MapPin size={28} className="mb-2 opacity-50" />
+                <div className="h-[280px] flex flex-col items-center justify-center text-text-muted dark:text-text-dark-muted space-y-2">
+                  <MapPin size={28} className="opacity-50" />
                   <p className="text-sm">暂无地域数据</p>
+                  <p className="text-xs">访问地域需要获取IP地址定位，目前仅记录访问量</p>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {hasSourceData && (
             <div className="bg-surface dark:bg-surface-dark-alt border border-border dark:border-border-dark rounded-xl p-5">
               <h3 className="text-base font-semibold text-text dark:text-text-dark mb-4 flex items-center gap-2">
-                <MapPin size={16} className="text-primary" />
-                地域分布
+                <ArrowRightCircle size={16} className="text-primary" />
+                来源明细
               </h3>
-              {hasRegionData ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={displayRegions} margin={{ top: 5, right: 20, left: 0, bottom: 5 }} layout="vertical">
-                    <XAxis
-                      type="number"
-                      tick={{ fill: 'var(--color-text-muted)', fontSize: 12 }}
-                      axisLine={{ stroke: 'var(--color-border)' }}
-                      tickLine={false}
-                      allowDecimals={false}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      tick={{ fill: 'var(--color-text-muted)', fontSize: 12 }}
-                      axisLine={{ stroke: 'var(--color-border)' }}
-                      tickLine={false}
-                      width={50}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'var(--color-surface)',
-                        borderColor: 'var(--color-border)',
-                        borderRadius: 8,
-                        fontSize: 13,
-                      }}
-                    />
-                    <Bar dataKey="count" name="访问次数" fill="var(--color-primary)" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-[300px] flex flex-col items-center justify-center text-text-muted dark:text-text-dark-muted">
-                  <MapPin size={28} className="mb-2 opacity-50" />
-                  <p className="text-sm">暂无地域数据</p>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-surface dark:bg-surface-dark-alt border border-border dark:border-border-dark rounded-xl p-5">
-              <h3 className="text-base font-semibold text-text dark:text-text-dark mb-4 flex items-center gap-2">
-                <Clock size={16} className="text-primary" />
-                最近访问
-                {displayRecent.length > 0 && (
-                  <span className="ml-auto text-xs text-text-muted dark:text-text-dark-muted font-normal">
-                    共 {recentVisits.length || 0} 条记录
-                  </span>
-                )}
-              </h3>
-              {displayRecent.length > 0 ? (
-                <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
-                  {displayRecent.map((visit) => (
-                    <div
-                      key={visit.id}
-                      className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-surface-alt dark:hover:bg-surface-dark transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${visit.isUnique ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'}`} />
-                        <div className="flex items-center gap-2">
-                          <MapPin size={14} className="text-text-muted dark:text-text-dark-muted" />
-                          <span className="text-sm font-medium text-text dark:text-text-dark">
-                            {visit.region}
-                          </span>
-                        </div>
-                      </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {displaySources.map((s, i) => (
+                  <div key={s.name} className="flex items-center justify-between p-3 rounded-lg bg-surface-alt dark:bg-surface-dark border border-border dark:border-border-dark">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-3 h-3 rounded-full shrink-0"
+                        style={{ backgroundColor: SOURCE_COLORS[i % SOURCE_COLORS.length] }}
+                      />
                       <div className="flex items-center gap-2">
-                        {visit.isUnique && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 dark:bg-primary/20 text-primary">
-                            新访客
-                          </span>
-                        )}
-                        <span className="text-xs text-text-muted dark:text-text-dark-muted font-mono">
-                          {formatTime(visit.timestamp)}
+                        <span className="text-text-muted dark:text-text-dark-muted">
+                          {getSourceIcon(s.name)}
+                        </span>
+                        <span className="text-sm font-medium text-text dark:text-text-dark">
+                          {s.name}
                         </span>
                       </div>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="h-[300px] flex flex-col items-center justify-center text-text-muted dark:text-text-dark-muted">
-                  <Clock size={28} className="mb-2 opacity-50" />
-                  <p className="text-sm">暂无访问记录</p>
-                </div>
-              )}
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-bold text-text dark:text-text-dark">{s.count}</span>
+                      <span className="text-xs text-text-muted dark:text-text-dark-muted">次</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
+          )}
+
+          <div className="bg-surface dark:bg-surface-dark-alt border border-border dark:border-border-dark rounded-xl p-5">
+            <h3 className="text-base font-semibold text-text dark:text-text-dark mb-4 flex items-center gap-2">
+              <Clock size={16} className="text-primary" />
+              最近访问
+              {displayRecent.length > 0 && (
+                <span className="ml-auto text-xs text-text-muted dark:text-text-dark-muted font-normal">
+                  共 {recentVisits.length || 0} 条记录
+                </span>
+              )}
+            </h3>
+            {displayRecent.length > 0 ? (
+              <div className="space-y-1.5 max-h-[380px] overflow-y-auto pr-1">
+                {displayRecent.map((visit) => (
+                  <div
+                    key={visit.id}
+                    className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-surface-alt dark:hover:bg-surface-dark transition-colors"
+                  >
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${visit.isUnique ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <ArrowRightCircle size={13} className="text-text-muted dark:text-text-dark-muted shrink-0" />
+                          <span className="text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-text-muted dark:text-text-dark-muted shrink-0">
+                            {visit.source || '未知来源'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <MapPin size={13} className="text-text-muted dark:text-text-dark-muted shrink-0" />
+                          <span className="text-sm text-text-secondary dark:text-text-dark-secondary truncate">
+                            {visit.region || '未知来源'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-4">
+                      {visit.isUnique && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 dark:bg-primary/20 text-primary">
+                          新访客
+                        </span>
+                      )}
+                      <span className="text-xs text-text-muted dark:text-text-dark-muted font-mono whitespace-nowrap">
+                        {formatTime(visit.timestamp)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="h-[200px] flex flex-col items-center justify-center text-text-muted dark:text-text-dark-muted">
+                <Clock size={28} className="mb-2 opacity-50" />
+                <p className="text-sm">暂无访问记录</p>
+              </div>
+            )}
           </div>
         </>
       )}
